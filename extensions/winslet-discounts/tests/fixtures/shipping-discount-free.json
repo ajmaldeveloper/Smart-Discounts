@@ -1,0 +1,115 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-discounts-generate-run",
+    "target": "cart.delivery-options.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "80.00",
+            "currencyCode": "USD"
+          }
+        },
+        "buyerIdentity": null,
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "80.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/4",
+              "sku": "ACME-3",
+              "weight": 1,
+              "product": {
+                "id": "gid://shopify/Product/4",
+                "vendor": "Acme",
+                "productType": "Widget"
+              }
+            }
+          }
+        ],
+        "deliveryGroups": [
+          {
+            "id": "gid://shopify/CartDeliveryGroup/0",
+            "deliveryOptions": [
+              {
+                "handle": "standard",
+                "title": "Standard",
+                "cost": {
+                  "amount": "10.00"
+                }
+              },
+              {
+                "handle": "express",
+                "title": "Express",
+                "cost": {
+                  "amount": "25.00"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": [
+          "SHIPPING"
+        ],
+        "metafield": {
+          "value": "{\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[{\"id\":\"c1\",\"type\":\"condition\",\"field\":\"cart.subtotal\",\"operator\":\"greater_than_or_equal\",\"value\":50}]},\"reward\":{\"shipping\":{\"value\":{\"type\":\"percentage\",\"value\":100}}}}"
+        },
+        "usageCountMetafield": null
+      },
+      "localization": {
+        "country": {
+          "isoCode": "US"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "deliveryDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Winslet discount",
+                "targets": [
+                  {
+                    "deliveryOption": {
+                      "handle": "standard"
+                    }
+                  }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "10.00"
+                  }
+                }
+              },
+              {
+                "message": "Winslet discount",
+                "targets": [
+                  {
+                    "deliveryOption": {
+                      "handle": "express"
+                    }
+                  }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "25.00"
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

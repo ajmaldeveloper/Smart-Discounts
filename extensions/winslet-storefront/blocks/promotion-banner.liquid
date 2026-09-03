@@ -1,0 +1,80 @@
+{%- comment -%}
+  Tag-gated promotional banner (M12) — covers the "VIP pricing message"
+  and "market-specific promotion banner" use cases from a single,
+  simple block. No theme-code injection: a merchant adds it via Theme
+  Editor and fills in the message/tag/country directly in block
+  settings, mirroring the targeting they set up in the matching Winslet
+  campaign (not auto-synced, same tradeoff as the shipping-progress
+  block — see that file's own comment).
+
+  Uses Shopify's own storefront `customer`/`localization` Liquid
+  globals directly — no app proxy call needed, since tag membership and
+  the buyer's resolved country are both native, always-fresh Liquid
+  data on every page render.
+{%- endcomment -%}
+
+{%- liquid
+  assign show_banner = true
+
+  if block.settings.required_tag != blank
+    assign show_banner = false
+    if customer and customer.tags contains block.settings.required_tag
+      assign show_banner = true
+    endif
+  endif
+
+  if show_banner and block.settings.required_country != blank
+    if localization.country.iso_code != block.settings.required_country
+      assign show_banner = false
+    endif
+  endif
+-%}
+
+{% if show_banner %}
+  <div
+    class="winslet-promotion-banner"
+    style="background:{{ block.settings.background_color }};color:{{ block.settings.text_color }};padding:12px 16px;border-radius:8px;text-align:center;font-size:14px;"
+    {{ block.shopify_attributes }}
+  >
+    {{ block.settings.message }}
+  </div>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Promotion banner",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "message",
+      "label": "Message",
+      "default": "VIP members save 15% today"
+    },
+    {
+      "type": "text",
+      "id": "required_tag",
+      "label": "Only show for customers with this tag (optional)",
+      "info": "Leave blank to show to everyone. Case-sensitive, must match the customer tag exactly."
+    },
+    {
+      "type": "text",
+      "id": "required_country",
+      "label": "Only show in this market's country (optional)",
+      "info": "Two-letter ISO country code, e.g. CA. Leave blank to show everywhere."
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background color",
+      "default": "#f4f1fe"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text color",
+      "default": "#202223"
+    }
+  ]
+}
+{% endschema %}

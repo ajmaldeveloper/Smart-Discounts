@@ -1,0 +1,22 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "t:name"
+handle = "winslet-discounts"
+type = "function"
+uid = "ecb38f0a-7fb9-fdd6-8457-ac604d84c2ee8e4e0043"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  [[extensions.targeting]]
+  target = "cart.delivery-options.discounts.generate.run"
+  input_query = "src/cart_delivery_options_discounts_generate_run.graphql"
+  export = "cart-delivery-options-discounts-generate-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

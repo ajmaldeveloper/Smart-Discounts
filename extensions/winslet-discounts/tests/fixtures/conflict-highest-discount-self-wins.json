@@ -1,0 +1,82 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "100.00",
+            "currencyCode": "USD"
+          }
+        },
+        "buyerIdentity": null,
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 6,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "100.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/20",
+              "sku": "CONFLICT-1",
+              "weight": 0,
+              "product": {
+                "id": "gid://shopify/Product/20",
+                "vendor": "Acme",
+                "productType": "Widget"
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": [
+          "PRODUCT"
+        ],
+        "metafield": {
+          "value": "{\"id\":\"buy5-20\",\"priority\":0,\"isExclusive\":false,\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[]},\"reward\":{\"product\":{\"value\":{\"type\":\"percentage\",\"value\":20},\"appliesTo\":\"ALL_MATCHING_LINES\"}},\"conflictStrategy\":\"HIGHEST_DISCOUNT\",\"siblings\":[{\"id\":\"vip-15\",\"priority\":0,\"isExclusive\":false,\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[]},\"reward\":{\"product\":{\"value\":{\"type\":\"percentage\",\"value\":15},\"appliesTo\":\"ALL_MATCHING_LINES\"}}},{\"id\":\"canada-summer-10\",\"priority\":0,\"isExclusive\":false,\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[]},\"reward\":{\"product\":{\"value\":{\"type\":\"percentage\",\"value\":10},\"appliesTo\":\"ALL_MATCHING_LINES\"}}}]}"
+        },
+        "usageCountMetafield": null
+      },
+      "localization": {
+        "country": {
+          "isoCode": "US"
+        },
+        "language": {
+          "isoCode": "EN"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Winslet discount",
+                "targets": [
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/0"
+                    }
+                  }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "20.00"
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

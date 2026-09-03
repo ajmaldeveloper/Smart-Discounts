@@ -1,0 +1,59 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "40.00",
+            "currencyCode": "USD"
+          }
+        },
+        "buyerIdentity": null,
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 2,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "40.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/10",
+              "sku": "TIER-2",
+              "weight": 0,
+              "product": {
+                "id": "gid://shopify/Product/10",
+                "vendor": "Acme",
+                "productType": "Widget"
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": [
+          "PRODUCT"
+        ],
+        "metafield": {
+          "value": "{\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[]},\"reward\":{\"product\":{\"value\":{\"type\":\"percentage\",\"value\":999},\"appliesTo\":\"ALL_MATCHING_LINES\",\"tierMetric\":\"cart.quantity\",\"tiers\":[{\"minValue\":3,\"value\":{\"type\":\"percentage\",\"value\":10}}]}}}"
+        },
+        "usageCountMetafield": null
+      },
+      "localization": {
+        "country": {
+          "isoCode": "US"
+        },
+        "language": {
+          "isoCode": "EN"
+        }
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

@@ -1,0 +1,386 @@
+// Prisma schema for Winslet Smart Discounts.
+//
+// Architecture: Merchant UI -> this database -> a compiler (built in M4)
+// -> Shopify metafields -> one shared Shopify Discount Function ->
+// checkout. The browser never decides a discount; every Campaign row
+// here is the durable source of truth, and the Function only ever reads
+// a compiled snapshot written at publish time.
+//
+// Deliberate deviation from the milestone plan's literal model list
+// (RuleGroup, Condition, Action, Tier, MarketRule, CustomerRule,
+// ShippingRule as separate tables): both sibling apps in this
+// portfolio (wholesale-registration, product-options) normalize a rule
+// into relational rows ONLY when a field needs its own DB-level
+// identity — per-row uniqueness, direct querying, ordering (see
+// PriceBreak, OptionChoice). Nothing about a condition tree, an
+// audience rule, a market rule, or a reward shape needs that; they are
+// read and written as a single unit (the whole Campaign), exactly like
+// LogicRule.configJson and PricingRule's scope/breaks snapshot in
+// those apps. So every WHO/WHERE/WHAT/CONDITIONS/REWARD facet below is
+// a native Json column on Campaign, with its shape defined and
+// validated in TypeScript (see app/lib/campaign-types.ts), not a
+// separate Prisma model. This keeps the schema stable while the shape
+// of what's inside each facet grows across M2-M8, matching the plan's
+// own goal: "generic so future conditions don't require rebuilding the
+// app."
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * Required by Shopify's Prisma session-storage adapter.
+ * Do not rename or remove these fields.
+ */
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+
+  @@index([shop])
+}
+
+/**
+ * One record for each Shopify store that installs the app.
+ */
+model Shop {
+  id String @id @default(cuid())
+
+  // Example: first-app-pk.myshopify.com
+  domain String @unique
+
+  name         String?
+  email        String?
+  currencyCode String?
+  countryCode  String?
+  timezone     String?
+
+  // FREE, GROWTH or PRO — see app/config/plans.ts. Only trusted for
+  // access control while planStatus is ACTIVE (entitlements.server.ts's
+  // getEffectivePlanCode falls back to FREE otherwise).
+  planCode   String @default("FREE")
+  planStatus String @default("ACTIVE")
+
+  // GIDs of this shop's shared Discount Function nodes, created once
+  // (via discountAutomaticAppCreate) and reused via
+  // discountAutomaticAppUpdate on every publish — one shared node per
+  // discount class actually in use, never one per Campaign. See the
+  // schema-level note above and M4's own architecture note.
+  discountFunctionIds Json?
+
+  // M10 Smart Conflict Engine defaults, applied whenever 2+ Campaigns'
+  // conditions match the same cart and neither is Campaign.isExclusive:
+  // HIGHEST_DISCOUNT, LOWEST_DISCOUNT or STACK. A Campaign's own
+  // priority/isExclusive (see Campaign below) override this per-match.
+  conflictStrategy        String @default("HIGHEST_DISCOUNT")
+  // Which of the two fields below is active — PERCENTAGE or
+  // FIXED_AMOUNT. Only one is ever meaningful at a time; the other
+  // stays null. The combined effective discount across every campaign
+  // that wins a given match is scaled down to never exceed this cap,
+  // independently per discount class (product/order).
+  maxTotalDiscountType String @default("PERCENTAGE")
+  // Percent of cart subtotal. Null means no cap (when type is PERCENTAGE).
+  maxTotalDiscountPercent Float?
+  // Absolute currency amount, in the shop's own currency. Null means
+  // no cap (when type is FIXED_AMOUNT).
+  maxTotalDiscountAmount Float?
+  // Bumped only when conflictStrategy/maxTotalDiscount* actually change
+  // (app.settings.tsx's action) — deliberately NOT Shop.updatedAt,
+  // which also moves on unrelated writes (webhook syncs, plan changes)
+  // and would false-positive every campaign's Republish indicator.
+  // Compared against each Campaign.publishedAt so a campaign published
+  // before a cap/strategy change gets flagged as having unpublished
+  // changes too, not just ones edited after the fact (see
+  // app.campaigns.$id.tsx's hasUnpublishedChanges).
+  conflictSettingsUpdatedAt DateTime?
+
+  installedAt   DateTime  @default(now())
+  uninstalledAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  campaigns          Campaign[]
+  webhookEvents      WebhookEvent[]
+  discountExecutions DiscountExecution[]
+  subscriptions      Subscription[]
+
+  @@index([planCode])
+  @@index([uninstalledAt])
+}
+
+/**
+ * History of this shop's Shopify Managed Pricing subscriptions — one
+ * row per subscription Shopify's Partner API has reported, kept even
+ * after cancellation for an audit trail. Shop.planCode/planStatus (the
+ * fields entitlements.server.ts actually reads) are the current
+ * snapshot; this table is how they got there. See
+ * services/subscriptions.server.ts's module comment for the full sync
+ * flow — a plan code arriving via form data, URL params, or browser
+ * state is NEVER trusted; only a Partner API-verified sync writes here.
+ */
+model Subscription {
+  id String @id @default(cuid())
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  shopifySubscriptionId String? @unique
+
+  // FREE, GROWTH or PRO
+  planCode String
+
+  // ACTIVE, PENDING, FROZEN, CANCELLED or EXPIRED
+  status String
+
+  trialEndsAt      DateTime?
+  currentPeriodEnd DateTime?
+  activatedAt      DateTime?
+  cancelledAt      DateTime?
+
+  detailsJson String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shopId])
+}
+
+/**
+ * Used to prevent processing the same Shopify webhook more than once.
+ */
+model WebhookEvent {
+  id String @id @default(cuid())
+
+  shopId String?
+  shop   Shop?   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Value from the X-Shopify-Webhook-Id header.
+  webhookId String @unique
+
+  topic      String
+  shopDomain String
+
+  payloadJson Json?
+
+  processedAt DateTime?
+  failedAt    DateTime?
+  error       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([shopId])
+  @@index([shopDomain])
+  @@index([topic])
+  @@index([processedAt])
+}
+
+/**
+ * A merchant-built promotion: WHO + WHERE + WHAT + WHEN + CONDITIONS ->
+ * REWARD. Every facet below is compiled together at publish time into
+ * one snapshot (see CampaignVersion) that the shared Discount
+ * Function(s) actually read — editing a published Campaign updates
+ * these live fields immediately (so Save always works, mirroring
+ * LockRule's pattern in wholesale-registration) but has no checkout
+ * effect until the merchant republishes.
+ */
+model Campaign {
+  id String @id @default(cuid())
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  name String
+
+  // DRAFT, ACTIVE, PAUSED or ARCHIVED.
+  status String @default("DRAFT")
+
+  // AUTOMATIC or CODE.
+  kind         String
+  discountCode String?
+
+  // GID of this campaign's own Shopify Discount node (DiscountAutomaticNode
+  // or DiscountCodeNode) — created once via discountAutomaticAppCreate/
+  // discountCodeAppCreate on first publish, reused via .../AppUpdate on
+  // every later publish. One Discount node per Campaign, but all of
+  // them reference the SAME shared deployed Function via functionHandle
+  // — never one Function per Campaign. See app/services/discount-publish.server.ts.
+  shopifyDiscountId String?
+
+  // Higher priority wins first when the Smart Conflict Engine (M10)
+  // needs to pick or order matches; independent of Shopify's own
+  // combinesWith mechanics.
+  priority Int @default(0)
+
+  // When true and this campaign matches, no other (non-exclusive)
+  // campaign applies to the same cart regardless of the shop's
+  // conflictStrategy — the highest-priority matching exclusive
+  // campaign wins outright. Ties among multiple matching exclusive
+  // campaigns break by estimated discount amount, then campaign id.
+  isExclusive Boolean @default(false)
+
+  // Usage limits. Null means unlimited. Enforcement is first-come-
+  // first-served against usageCount (updated by webhooks.orders.paid
+  // as orders complete) and, independently, against each buyer's own
+  // per-campaign count stored in a customer metafield (see
+  // app/services/usage-tracking.server.ts) — the two caps are
+  // unrelated: usageLimitPerCustomer caps how many of the
+  // usageLimitTotal uses any single customer can claim, not an
+  // allowance on top of it. Counting happens after order completion,
+  // not atomically reserved at checkout — see that service's own
+  // module comment for why a Function-based (non-native) discount
+  // can't do better than near-real-time enforcement here.
+  usageLimitTotal        Int?
+  usageLimitPerCustomer  Int?
+  usageCount             Int  @default(0)
+
+  // WHO — customer/audience targeting (M6). Null matches every buyer.
+  audienceJson Json?
+
+  // WHERE — Shopify Markets / country / currency / B2B localization
+  // rules (M5). Null matches every market. Normalized (not a single
+  // stored Market ID) per M5's own note on parent/child Market
+  // matching not being robust otherwise.
+  marketJson Json?
+
+  // WHAT — eligible/excluded products, collections, tags, vendors,
+  // types, SKUs, metafields (M2). Null matches every product.
+  productScopeJson Json?
+
+  // CONDITIONS — the generic nested ALL/ANY condition tree for
+  // anything beyond audience/market/product scope (cart subtotal,
+  // quantity, weight, custom combinations). See
+  // app/lib/campaign-types.ts's ConditionNode. Null means no extra
+  // conditions beyond the facets above.
+  conditionsJson Json?
+
+  // WHEN.
+  scheduleStartAt DateTime?
+  scheduleEndAt   DateTime?
+  timezone        String?
+
+  // REWARD — product/order/shipping discount + tier configuration.
+  // Shape defined in M4 (Discount Function Engine) / M7 (Tier Engine) /
+  // M8 (Shipping Engine). Required: a campaign with no reward does
+  // nothing.
+  rewardJson Json
+
+  // STACKING — this campaign's own combination behavior plus the Smart
+  // Conflict Engine's resolution strategy against other Winslet
+  // campaigns (M10). Shopify's own combinesWith rules still govern
+  // stacking against non-Winslet discounts and are not overridden here.
+  stackingJson Json?
+
+  // Full compiled snapshot as of the last publish — the Function and
+  // the Simulator (M11) both read this, never the live draft fields
+  // above. Null until first published. Mirrors
+  // Form.publishedSnapshotJson / PricingRule.publishedSnapshotJson in
+  // wholesale-registration.
+  publishedSnapshotJson Json?
+  publishedAt           DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions   CampaignVersion[]
+  executions DiscountExecution[]
+  analytics  CampaignAnalyticsDaily[]
+
+  @@index([shopId])
+  @@index([shopId, status])
+  @@index([shopId, updatedAt])
+}
+
+/**
+ * A permanent, append-only history of every snapshot a Campaign was
+ * published with. Lets the Simulator/explainability engine (M11)
+ * evaluate "why did this discount apply to that past order" against
+ * the exact config that was live at the time, not the current draft —
+ * Campaign.publishedSnapshotJson alone only ever holds the latest one.
+ */
+model CampaignVersion {
+  id String @id @default(cuid())
+
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  snapshotJson Json
+
+  publishedAt DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([campaignId, publishedAt])
+}
+
+/**
+ * One row per order line/shipping line a Winslet campaign actually
+ * discounted, captured from order webhooks. Feeds both the Analytics
+ * Engine (M13) and the Simulator's real-world validation (M11).
+ */
+model DiscountExecution {
+  id String @id @default(cuid())
+
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Null if the matching Campaign was later deleted; the identity
+  // fields below stay so historical analytics remain attributable.
+  campaignId   String?
+  campaign     Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  campaignName String
+
+  orderId   String
+  orderName String
+
+  discountAmount Decimal @db.Decimal(10, 2)
+  currency       String
+
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([shopId, occurredAt])
+  @@index([campaignId])
+  @@index([orderId])
+}
+
+/**
+ * Daily, pre-aggregated performance for one Campaign — avoids summing
+ * raw DiscountExecution rows on every Analytics page load (M13).
+ */
+model CampaignAnalyticsDaily {
+  id String @id @default(cuid())
+
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  // Truncated to the day, in the shop's timezone at aggregation time.
+  date DateTime
+
+  ordersCount   Int     @default(0)
+  totalDiscount Decimal @default(0) @db.Decimal(10, 2)
+  totalRevenue  Decimal @default(0) @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([campaignId, date])
+  @@index([campaignId, date])
+}

@@ -1,0 +1,82 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "150.00",
+            "currencyCode": "USD"
+          }
+        },
+        "buyerIdentity": null,
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "150.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/2",
+              "sku": "ACME-1",
+              "weight": 0,
+              "product": {
+                "id": "gid://shopify/Product/2",
+                "vendor": "Acme",
+                "productType": "Widget"
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": [
+          "ORDER"
+        ],
+        "metafield": {
+          "value": "{\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[{\"id\":\"c1\",\"type\":\"condition\",\"field\":\"cart.subtotal\",\"operator\":\"greater_than_or_equal\",\"value\":100}]},\"reward\":{\"order\":{\"value\":{\"type\":\"fixedAmount\",\"value\":20},\"maxDiscountAmount\":15}}}"
+        },
+        "usageCountMetafield": null
+      },
+      "localization": {
+        "country": {
+          "isoCode": "US"
+        },
+        "language": {
+          "isoCode": "EN"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "orderDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Winslet discount",
+                "targets": [
+                  {
+                    "orderSubtotal": {
+                      "excludedCartLineIds": []
+                    }
+                  }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "15.00"
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "FIRST"
+          }
+        }
+      ]
+    }
+  }
+}

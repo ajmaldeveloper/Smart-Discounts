@@ -1,0 +1,62 @@
+query CartLinesDiscountsGenerateRunInput {
+  cart {
+    cost {
+      subtotalAmount {
+        amount
+        currencyCode
+      }
+    }
+    buyerIdentity {
+      isAuthenticated
+      customer {
+        id
+        numberOfOrders
+        amountSpent {
+          amount
+        }
+        buyerDataMetafield: metafield(namespace: "$app", key: "buyer_data") {
+          value
+        }
+      }
+    }
+    lines {
+      id
+      quantity
+      cost {
+        subtotalAmount {
+          amount
+        }
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          sku
+          weight
+          product {
+            id
+            vendor
+            productType
+          }
+        }
+      }
+    }
+  }
+  discount {
+    discountClasses
+    metafield(namespace: "$app", key: "function-configuration") {
+      value
+    }
+    usageCountMetafield: metafield(namespace: "$app", key: "usage-count") {
+      value
+    }
+  }
+  localization {
+    country {
+      isoCode
+    }
+    language {
+      isoCode
+    }
+  }
+}

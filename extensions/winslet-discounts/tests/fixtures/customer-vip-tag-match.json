@@ -1,0 +1,94 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "100.00",
+            "currencyCode": "USD"
+          }
+        },
+        "buyerIdentity": {
+          "isAuthenticated": true,
+          "customer": {
+            "id": "gid://shopify/Customer/1",
+            "numberOfOrders": 8,
+            "amountSpent": {
+              "amount": "820.00"
+            },
+            "buyerDataMetafield": {
+              "value": "{\"tags\":[\"VIP\",\"Newsletter\"],\"usage\":{}}"
+            }
+          }
+        },
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "100.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/7",
+              "sku": "VIP-1",
+              "weight": 0,
+              "product": {
+                "id": "gid://shopify/Product/7",
+                "vendor": "Acme",
+                "productType": "Widget"
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": [
+          "ORDER"
+        ],
+        "metafield": {
+          "value": "{\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[{\"id\":\"c1\",\"type\":\"condition\",\"field\":\"customer.tag\",\"operator\":\"in\",\"value\":[\"VIP\",\"Gold\"]},{\"id\":\"c2\",\"type\":\"condition\",\"field\":\"customer.orderCount\",\"operator\":\"greater_than_or_equal\",\"value\":3}]},\"reward\":{\"order\":{\"value\":{\"type\":\"percentage\",\"value\":15}}}}"
+        },
+        "usageCountMetafield": null
+      },
+      "localization": {
+        "country": {
+          "isoCode": "US"
+        },
+        "language": {
+          "isoCode": "EN"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "orderDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Winslet discount",
+                "targets": [
+                  {
+                    "orderSubtotal": {
+                      "excludedCartLineIds": []
+                    }
+                  }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "15.00"
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "FIRST"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-discounts-generate-run",
+    "target": "cart.delivery-options.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "0.00",
+            "currencyCode": "USD"
+          }
+        },
+        "buyerIdentity": null,
+        "lines": [],
+        "deliveryGroups": []
+      },
+      "discount": {
+        "discountClasses": [
+          "SHIPPING"
+        ],
+        "metafield": null,
+        "usageCountMetafield": null
+      },
+      "localization": {
+        "country": {
+          "isoCode": "US"
+        }
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

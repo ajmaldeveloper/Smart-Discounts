@@ -1,0 +1,103 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "55.00",
+            "currencyCode": "USD"
+          }
+        },
+        "buyerIdentity": null,
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 2,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "40.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/100",
+              "sku": "SHIRT-1",
+              "weight": 0.5,
+              "product": {
+                "id": "gid://shopify/Product/100",
+                "vendor": "Acme",
+                "productType": "Shirt"
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "15.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/200",
+              "sku": "TOTE-1",
+              "weight": 0.2,
+              "product": {
+                "id": "gid://shopify/Product/200",
+                "vendor": "GiftCo",
+                "productType": "Bag"
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": [
+          "PRODUCT"
+        ],
+        "metafield": {
+          "value": "{\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[{\"id\":\"c1\",\"type\":\"condition\",\"field\":\"product.vendor\",\"operator\":\"equals\",\"value\":\"Acme\"}]},\"reward\":{\"product\":{\"value\":{\"type\":\"percentage\",\"value\":0},\"appliesTo\":\"CHEAPEST_MATCHING_LINE\",\"tierMetric\":\"cart.quantity\",\"tiers\":[{\"minValue\":2,\"value\":{\"type\":\"percentage\",\"value\":100},\"getQuantity\":1,\"freeProductIds\":[\"gid://shopify/Product/200\"]}]}}}"
+        },
+        "usageCountMetafield": null
+      },
+      "localization": {
+        "country": {
+          "isoCode": "US"
+        },
+        "language": {
+          "isoCode": "EN"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Winslet discount",
+                "targets": [
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/1",
+                      "quantity": 1
+                    }
+                  }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "15.00"
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

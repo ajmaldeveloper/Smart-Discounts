@@ -1,0 +1,61 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "0f0517f60982efe415aa1ee3142bb6cd"
+name = "Winslet Smart Discounts"
+application_url = "https://winslet-smart-discounts.fly.dev"
+embedded = true
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+# read_customers/write_customers back M6 (Customer Intelligence) —
+# Shopify restricts these scopes to apps with legitimate functionality
+# requiring them. write_customers is used narrowly: only to mirror a
+# customer's own tags into a "$app" metafield the Discount Function
+# reads at checkout (see webhooks.customers.update.tsx) — never to
+# modify a customer's actual profile data.
+# read_markets backs M5 (Markets tab + market.id/market.countryCode
+# condition fields) — read-only, Winslet never creates/edits Markets.
+scopes = "write_discounts,read_products,read_customers,write_customers,read_orders,read_markets"
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/update"
+  topics = [ "customers/update" ]
+
+  # Drives usage-limit tracking (M4.5) and M13 analytics.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/paid"
+  topics = [ "orders/paid" ]
+
+  # Keeps Shop.planCode/planStatus in sync the moment a Shopify Managed
+  # Pricing subscription activates, changes, or cancels — see
+  # app/routes/webhooks.app_subscriptions.update.tsx and
+  # subscriptions.server.ts.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app_subscriptions/update"
+  topics = [ "app_subscriptions/update" ]
+
+  # Mandatory GDPR compliance webhooks — required for App Store approval.
+  # These three specifically use `compliance_topics`, not `topics`, and
+  # share ONE uri/route (see app/routes/webhooks.compliance.tsx) —
+  # declaring them with `topics` like a normal subscription is rejected
+  # as an invalid topic at app-preview/deploy time.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/compliance"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+
+[auth]
+redirect_urls = [ "https://winslet-smart-discounts.fly.dev/api/auth" ]
+
+[build]
+automatically_update_urls_on_dev = true

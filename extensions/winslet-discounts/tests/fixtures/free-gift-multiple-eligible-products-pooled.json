@@ -1,0 +1,139 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "56.00",
+            "currencyCode": "USD"
+          }
+        },
+        "buyerIdentity": null,
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 2,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "40.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/100",
+              "sku": "SHIRT-1",
+              "weight": 0.5,
+              "product": {
+                "id": "gid://shopify/Product/100",
+                "vendor": "Acme",
+                "productType": "Shirt"
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "10.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/200",
+              "sku": "TOTE-1",
+              "weight": 0.2,
+              "product": {
+                "id": "gid://shopify/Product/200",
+                "vendor": "GiftCo",
+                "productType": "Bag"
+              }
+            }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "6.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/300",
+              "sku": "MUG-1",
+              "weight": 0.3,
+              "product": {
+                "id": "gid://shopify/Product/300",
+                "vendor": "GiftCo",
+                "productType": "Mug"
+              }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": [
+          "PRODUCT"
+        ],
+        "metafield": {
+          "value": "{\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[{\"id\":\"c1\",\"type\":\"condition\",\"field\":\"product.vendor\",\"operator\":\"equals\",\"value\":\"Acme\"}]},\"reward\":{\"product\":{\"value\":{\"type\":\"percentage\",\"value\":0},\"appliesTo\":\"CHEAPEST_MATCHING_LINE\",\"tierMetric\":\"cart.quantity\",\"tiers\":[{\"minValue\":2,\"value\":{\"type\":\"percentage\",\"value\":100},\"getQuantity\":2,\"freeProductIds\":[\"gid://shopify/Product/200\",\"gid://shopify/Product/300\"]}]}}}"
+        },
+        "usageCountMetafield": null
+      },
+      "localization": {
+        "country": {
+          "isoCode": "US"
+        },
+        "language": {
+          "isoCode": "EN"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Winslet discount",
+                "targets": [
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/2",
+                      "quantity": 1
+                    }
+                  }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "6.00"
+                  }
+                }
+              },
+              {
+                "message": "Winslet discount",
+                "targets": [
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/1",
+                      "quantity": 1
+                    }
+                  }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "10.00"
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

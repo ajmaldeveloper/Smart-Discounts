@@ -1,0 +1,100 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-discounts-generate-run",
+    "target": "cart.delivery-options.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": {
+            "amount": "120.00",
+            "currencyCode": "EUR"
+          }
+        },
+        "buyerIdentity": null,
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "cost": {
+              "subtotalAmount": {
+                "amount": "120.00"
+              }
+            },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/11",
+              "sku": "DE-2",
+              "weight": 1,
+              "product": {
+                "id": "gid://shopify/Product/11",
+                "vendor": "Acme",
+                "productType": "Widget"
+              }
+            }
+          }
+        ],
+        "deliveryGroups": [
+          {
+            "id": "gid://shopify/CartDeliveryGroup/0",
+            "deliveryOptions": [
+              {
+                "handle": "standard",
+                "title": "Standard Shipping",
+                "cost": {
+                  "amount": "8.00"
+                }
+              },
+              {
+                "handle": "express",
+                "title": "Express Shipping",
+                "cost": {
+                  "amount": "20.00"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": [
+          "SHIPPING"
+        ],
+        "metafield": {
+          "value": "{\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[{\"id\":\"c1\",\"type\":\"condition\",\"field\":\"market.countryCode\",\"operator\":\"equals\",\"value\":\"DE\"},{\"id\":\"c2\",\"type\":\"condition\",\"field\":\"cart.subtotal\",\"operator\":\"greater_than_or_equal\",\"value\":100}]},\"reward\":{\"shipping\":{\"value\":{\"type\":\"percentage\",\"value\":100},\"optionTitle\":\"Standard Shipping\"}}}"
+        },
+        "usageCountMetafield": null
+      },
+      "localization": {
+        "country": {
+          "isoCode": "DE"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "deliveryDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Winslet discount",
+                "targets": [
+                  {
+                    "deliveryOption": {
+                      "handle": "standard"
+                    }
+                  }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "8.00"
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

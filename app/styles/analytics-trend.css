@@ -1,0 +1,85 @@
+/*
+ * Single-series bar chart palette — validated with the dataviz skill's
+ * validate_palette.js (categorical slot 1, both modes PASS: light
+ * lightness 0.43–0.77 band, dark 0.48–0.67 band, chroma floor, >=3:1
+ * surface contrast). A single series needs no legend — the chart's own
+ * heading names it — so this is the only color role this file defines.
+ */
+.wsd-trend {
+  color-scheme: light;
+  --wsd-series-1: #2a78d6;
+  --wsd-trend-line: var(--p-color-text-secondary, #616161);
+  --wsd-grid: var(--p-color-border-secondary, #e3e3e3);
+  --wsd-baseline: var(--p-color-border, #c9cccf);
+  --wsd-axis-text: var(--p-color-text-secondary, #616161);
+  --wsd-tooltip-bg: var(--p-color-bg-surface-inverse, #1a1a1a);
+  --wsd-tooltip-text: var(--p-color-text-inverse, #ffffff);
+  --wsd-hover-fill: var(--p-color-bg-surface-secondary, #f4f4f5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .wsd-trend {
+    color-scheme: dark;
+    --wsd-series-1: #3987e5;
+    --wsd-trend-line: #9a9ea3;
+  }
+}
+
+:root[data-theme="dark"] .wsd-trend {
+  color-scheme: dark;
+  --wsd-series-1: #3987e5;
+  --wsd-trend-line: #9a9ea3;
+}
+
+.wsd-trend-table-scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--wsd-grid);
+  border-radius: 8px;
+}
+
+.wsd-trend-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.wsd-trend-table th {
+  position: sticky;
+  top: 0;
+  text-align: right;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--wsd-axis-text);
+  background: var(--p-color-bg-surface, #ffffff);
+  border-bottom: 1px solid var(--wsd-grid);
+}
+
+.wsd-trend-table th:first-child {
+  text-align: left;
+}
+
+.wsd-trend-table td {
+  text-align: right;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wsd-trend-table td:first-child {
+  text-align: left;
+}
+
+.wsd-trend-tooltip {
+  position: absolute;
+  top: 0;
+  background: var(--wsd-tooltip-bg);
+  color: var(--wsd-tooltip-text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 1;
+}

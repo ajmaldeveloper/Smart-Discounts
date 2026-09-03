@@ -1,0 +1,55 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": {
+          "subtotalAmount": { "amount": "100.00", "currencyCode": "USD" }
+        },
+        "buyerIdentity": null,
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "cost": { "subtotalAmount": { "amount": "100.00" } },
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/31",
+              "sku": "USAGE-2",
+              "weight": 0,
+              "product": { "id": "gid://shopify/Product/31", "vendor": "Acme", "productType": "Widget" }
+            }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["ORDER"],
+        "metafield": {
+          "value": "{\"id\":\"limited-10\",\"priority\":0,\"isExclusive\":false,\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[]},\"reward\":{\"order\":{\"value\":{\"type\":\"percentage\",\"value\":10}}},\"conflictStrategy\":\"STACK\",\"siblings\":[],\"usageLimitTotal\":10}"
+        },
+        "usageCountMetafield": { "value": "9" }
+      },
+      "localization": {
+        "country": { "isoCode": "US" },
+        "language": { "isoCode": "EN" }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "orderDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Winslet discount",
+                "targets": [{ "orderSubtotal": { "excludedCartLineIds": [] } }],
+                "value": { "fixedAmount": { "amount": "10.00" } }
+              }
+            ],
+            "selectionStrategy": "FIRST"
+          }
+        }
+      ]
+    }
+  }
+}
