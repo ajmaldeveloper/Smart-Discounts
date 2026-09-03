@@ -165,8 +165,6 @@ export default function RewardEditor({ value, onChange, currencyCode, productRef
                 onChange={(cap) => onChange({ ...value, shipping: { ...(value.shipping as ShippingReward), maxDiscountAmount: cap } })}
               />
             </s-grid>
-
-            <s-text tone="neutral">100% = free shipping</s-text>
           </s-stack>
         )}
       </RewardSection>
@@ -445,7 +443,7 @@ function BogoEditor({
 
   return (
     <s-stack direction="block" gap="base">
-      <s-grid gridTemplateColumns="repeat(2, minmax(120px, 1fr))" gap="base" alignItems="end">
+      <s-grid gridTemplateColumns={`repeat(${hideName ? 2 : 3}, minmax(120px, 1fr))`} gap="base" alignItems="end">
         <s-number-field
           label="Buy"
           min={0}
@@ -459,14 +457,22 @@ function BogoEditor({
           value={String(getQuantity)}
           onInput={(event: ControlEvent) => rebuild(buyQuantity, Number(readValue(event)) || 1)}
         />
+
+        {!hideName && <NameField value={tier.name} onChange={(name) => onChange({ ...tier, name })} />}
       </s-grid>
 
-      {!hideName && <NameField value={tier.name} onChange={(name) => onChange({ ...tier, name })} />}
-
-      <s-text color="subdued">
-        Free units scale in gradually past the buy quantity — e.g. buying {buyQuantity + 1} already gets 1 free, up to {getQuantity} free at{" "}
-        {buyQuantity + getQuantity}.
-      </s-text>
+      {freeProductIds.length > 1 && (
+        <s-select
+          label="When the shopper has more than one of these"
+          value={tier.freeGiftAllocation ?? "CHEAPEST"}
+          onChange={(event: ControlEvent) =>
+            onChange({ ...tier, freeGiftAllocation: readValue(event) === "MOST_EXPENSIVE" ? "MOST_EXPENSIVE" : undefined })
+          }
+        >
+          <s-option value="CHEAPEST">Cheapest first</s-option>
+          <s-option value="MOST_EXPENSIVE">Most expensive first</s-option>
+        </s-select>
+      )}
 
       <s-stack direction="block" gap="small">
         <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
@@ -504,21 +510,8 @@ function BogoEditor({
               );
             })}
 
-            {freeProductIds.length > 1 ? (
-              <s-select
-                label="When the shopper has more than one of these"
-                value={tier.freeGiftAllocation ?? "CHEAPEST"}
-                onChange={(event: ControlEvent) =>
-                  onChange({ ...tier, freeGiftAllocation: readValue(event) === "MOST_EXPENSIVE" ? "MOST_EXPENSIVE" : undefined })
-                }
-              >
-                <s-option value="CHEAPEST">Cheapest first</s-option>
-                <s-option value="MOST_EXPENSIVE">Most expensive first</s-option>
-              </s-select>
-            ) : (
-              <s-text color="subdued">
-                &ldquo;Get free&rdquo; units are shared across all {freeProductIds.length} products above.
-              </s-text>
+            {freeProductIds.length === 1 && (
+              <s-text color="subdued">&ldquo;Get free&rdquo; units are shared across all {freeProductIds.length} products above.</s-text>
             )}
           </s-stack>
         ) : (
