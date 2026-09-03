@@ -95,15 +95,18 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
   const id = params.id;
   // A bad/stale/deleted campaign ID lands here just like an unmatched
-  // /app/* path (see app.$.tsx) — redirect to /app instead of throwing
-  // a 404 Response, which app.tsx's ErrorBoundary would otherwise
-  // render as a bare "404" with no way back into the app.
-  if (!id) return redirect("/app");
+  // /app/* path (see app.$.tsx). A server-side redirect() Response
+  // confuses Shopify Admin's embedded iframe shell (it expects app
+  // navigation to go through App Bridge, not a raw HTTP 3xx) — so
+  // instead this returns a minimal "not found" payload and the
+  // component itself does a plain client-side reload to /app, exactly
+  // like a merchant clicking any other in-app link.
+  if (!id) return { notFound: true as const };
 
   const shop = await db.shop.findUnique({ where: { domain: session.shop } });
   const campaign = shop ? await getCampaign(shop.id, id) : null;
 
-  if (!campaign) return redirect("/app");
+  if (!campaign) return { notFound: true as const };
 
   const url = new URL(request.url);
   const noticeParam = url.searchParams.get("notice");
@@ -536,7 +539,38 @@ function TimeFields({ label, value, onChange }: { label: string; value: string; 
   );
 }
 
+function CampaignNotFound() {
+  // A bad/stale/deleted campaign ID — see the loader's own comment for
+  // why this reloads client-side instead of the loader itself
+  // returning a redirect() Response.
+  useEffect(() => {
+    window.location.replace("/app");
+  }, []);
+
+  return (
+    <s-page heading="Campaign not found">
+      <s-section>
+        <s-stack direction="block" gap="base" alignItems="center">
+          <s-text color="subdued">Taking you back to the app…</s-text>
+        </s-stack>
+      </s-section>
+    </s-page>
+  );
+}
+
 export default function CampaignEditor() {
+  const loaderData = useLoaderData<typeof loader>();
+  // A separate component, not an early return in this one — every hook
+  // below must run unconditionally on every render, and an early
+  // return here (before those hooks) would violate rules-of-hooks the
+  // moment a bad campaign ID makes "notFound" true.
+  if ("notFound" in loaderData) return <CampaignNotFound />;
+  return <CampaignEditorLoaded data={loaderData} />;
+}
+
+type FoundLoaderData = Exclude<Awaited<ReturnType<typeof loader>>, { notFound: true }>;
+
+function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
   const {
     campaign,
     conditionsTree,
@@ -549,7 +583,7 @@ export default function CampaignEditor() {
     allCountries,
     loadNotice,
     planFeatures,
-  } = useLoaderData<typeof loader>();
+  } = data;
   const hasFeature = (feature: string) => (planFeatures as readonly string[]).includes(feature);
   // Scheduling is anchored to the merchant's own device/browser timezone,
   // not the shop's configured one — shopTimezone here is only the
