@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Outlet, isRouteErrorResponse, useLoaderData, useNavigate, useRouteError } from "react-router";
 import { useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
@@ -64,7 +64,23 @@ export default function App() {
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+  const navigate = useNavigate();
+  // A thrown redirect (e.g. authenticate.admin's own re-auth flow) never
+  // reaches here — the router handles those transparently. Only a real
+  // 404 (a bad campaign ID, a stale bookmark, any other /app/* route
+  // that throws "not found") lands in this boundary, so it's safe to
+  // send every one of them back to /app instead of leaving the
+  // merchant stuck on a bare "404" with no way back into the app.
+  const isNotFound = isRouteErrorResponse(error) && error.status === 404;
+
+  useEffect(() => {
+    if (isNotFound) navigate("/app", { replace: true });
+  }, [isNotFound, navigate]);
+
+  if (isNotFound) return null;
+
+  return boundary.error(error);
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

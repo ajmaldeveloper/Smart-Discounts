@@ -94,12 +94,16 @@ const CREATE_NOTICES: Record<string, string> = {
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
   const id = params.id;
-  if (!id) throw new Response("Campaign ID is required.", { status: 400 });
+  // A bad/stale/deleted campaign ID lands here just like an unmatched
+  // /app/* path (see app.$.tsx) — redirect to /app instead of throwing
+  // a 404 Response, which app.tsx's ErrorBoundary would otherwise
+  // render as a bare "404" with no way back into the app.
+  if (!id) return redirect("/app");
 
   const shop = await db.shop.findUnique({ where: { domain: session.shop } });
   const campaign = shop ? await getCampaign(shop.id, id) : null;
 
-  if (!campaign) throw new Response("Campaign not found.", { status: 404 });
+  if (!campaign) return redirect("/app");
 
   const url = new URL(request.url);
   const noticeParam = url.searchParams.get("notice");
