@@ -366,7 +366,13 @@ export async function resumeCampaign(admin: AdminApiContext, campaign: Campaign)
   const result = await runLifecycleMutation(admin, campaign, "activate");
   if (!result.ok) return result;
 
-  await db.campaign.update({ where: { id: campaign.id }, data: { status: "ACTIVE" } });
+  // Reactivating only flips Shopify's own enabled bit (see the lifecycle
+  // mutation above) — it never re-pushes the compiled snapshot, so the
+  // live content is exactly whatever publishedAt already says it is.
+  // Re-pin updatedAt to that same instant instead of letting Prisma's
+  // @updatedAt auto-bump it to "now", or hasUnpublishedChanges would
+  // spuriously flag a Republish the moment this resume completes.
+  await db.campaign.update({ where: { id: campaign.id }, data: { status: "ACTIVE", updatedAt: campaign.publishedAt ?? new Date() } });
   return { ok: true };
 }
 
@@ -395,9 +401,14 @@ export async function publishCampaign(admin: AdminApiContext, campaign: Campaign
       : await publishAutomatic(admin, campaign, discountClasses, metafieldValue);
 
   if (result.ok) {
+    // The SAME instant for both fields — @updatedAt otherwise
+    // auto-stamps a few milliseconds after this literal `publishedAt`
+    // was evaluated, leaving updatedAt permanently just past
+    // publishedAt and hasUnpublishedChanges permanently (wrongly) true.
+    const publishedAt = new Date();
     await db.campaign.update({
       where: { id: campaign.id },
-      data: { status: "ACTIVE", publishedSnapshotJson: compiled as unknown as object, publishedAt: new Date() },
+      data: { status: "ACTIVE", publishedSnapshotJson: compiled as unknown as object, publishedAt, updatedAt: publishedAt },
     });
   }
 

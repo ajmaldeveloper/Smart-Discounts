@@ -136,6 +136,27 @@ describe("reward engine parity: app/lib/reward-types.ts vs extensions/winslet-di
     expect(atOne).toBeNull();
   });
 
+  it("resolveDiscountValue surfaces a free-gift tier's freeGiftAllocation choice, agreeing between engines", () => {
+    const mostExpensiveFirstTiers = [
+      {
+        minValue: 2,
+        value: { type: "percentage" as const, value: 100 },
+        getQuantity: 1,
+        freeProductIds: ["gid://shopify/Product/999", "gid://shopify/Product/1000"],
+        freeGiftAllocation: "MOST_EXPENSIVE" as const,
+      },
+    ];
+    const reward = {
+      value: { type: "percentage" as const, value: 0 },
+      tierMetric: "cart.quantity" as const,
+      tiers: mostExpensiveFirstTiers,
+    };
+
+    const atTwo = functionEngine.resolveDiscountValue(reward, { quantity: 2, subtotal: 0 });
+    expect(atTwo).toEqual(adminEngine.resolveDiscountValue(reward, { quantity: 2, subtotal: 0 }));
+    expect(atTwo?.freeGiftAllocation).toBe("MOST_EXPENSIVE");
+  });
+
   it("resolveDiscountValue enforces a Simple (non-tiered) reward's minimum requirement, agreeing between engines", () => {
     const reward = { value: { type: "percentage" as const, value: 15 }, minimumMetric: "cart.subtotal" as const, minimumValue: 50 };
 

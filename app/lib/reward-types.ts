@@ -51,12 +51,18 @@ export interface TierBreak {
   // (not just lines the campaign's conditions match — the gift doesn't
   // have to satisfy the buy conditions), and the "buy" quantity is
   // measured against the campaign's own matching lines rather than the
-  // whole cart. Free units are allocated across eligible lines
-  // cheapest-first, up to getQuantity total. No discount fires unless
-  // the customer has already added at least one of these products to
-  // their cart themselves — a Discount Function can only reprice
-  // existing cart lines, never add a new one.
+  // whole cart. Free units are allocated across eligible lines in
+  // freeGiftAllocation order, up to getQuantity total. No discount
+  // fires unless the customer has already added at least one of these
+  // products to their cart themselves — a Discount Function can only
+  // reprice existing cart lines, never add a new one.
   freeProductIds?: string[];
+  // Which eligible line(s) get the free treatment first when the
+  // shopper has more than one of the freeProductIds pool in cart —
+  // mirrors the plain (non-free-gift) shape's own CHEAPEST/
+  // MOST_EXPENSIVE_MATCHING_LINE choice. Defaults to CHEAPEST (today's
+  // existing behavior) when unset, so old campaigns need no migration.
+  freeGiftAllocation?: "CHEAPEST" | "MOST_EXPENSIVE";
 }
 
 export interface ProductReward {
@@ -173,6 +179,7 @@ function normalizeTiers(raw: unknown): TierBreak[] {
         ...(record.exactMatch === true ? { exactMatch: true } : {}),
         ...(isFiniteNumber(record.getQuantity) && record.getQuantity > 0 ? { getQuantity: Math.floor(record.getQuantity) } : {}),
         ...(freeProductIds.length > 0 ? { freeProductIds } : {}),
+        ...(freeProductIds.length > 0 && record.freeGiftAllocation === "MOST_EXPENSIVE" ? { freeGiftAllocation: "MOST_EXPENSIVE" as const } : {}),
       };
     })
     .filter((tier): tier is TierBreak => tier !== null)
@@ -310,7 +317,14 @@ export function resolveDiscountValue(
     minimumValue?: number;
   },
   metrics: { quantity: number; subtotal: number },
-): { value: DiscountValue; maxDiscountAmount?: number; name?: string; getQuantity?: number; freeProductIds?: string[] } | null {
+): {
+  value: DiscountValue;
+  maxDiscountAmount?: number;
+  name?: string;
+  getQuantity?: number;
+  freeProductIds?: string[];
+  freeGiftAllocation?: "CHEAPEST" | "MOST_EXPENSIVE";
+} | null {
   if (reward.minimumValue !== undefined && reward.minimumValue > 0) {
     const minimumMetricValue = reward.minimumMetric === "cart.subtotal" ? metrics.subtotal : metrics.quantity;
     if (minimumMetricValue < reward.minimumValue) return null;
@@ -329,7 +343,14 @@ export function resolveDiscountValue(
     const getQuantity =
       tier.getQuantity !== undefined ? Math.max(0, Math.min(tier.getQuantity, metricValue - tier.minValue + tier.getQuantity)) : undefined;
 
-    return { value: tier.value, maxDiscountAmount: tier.maxDiscountAmount, name: tier.name, getQuantity, freeProductIds: tier.freeProductIds };
+    return {
+      value: tier.value,
+      maxDiscountAmount: tier.maxDiscountAmount,
+      name: tier.name,
+      getQuantity,
+      freeProductIds: tier.freeProductIds,
+      freeGiftAllocation: tier.freeGiftAllocation,
+    };
   }
 
   return { value: reward.value, maxDiscountAmount: reward.maxDiscountAmount };

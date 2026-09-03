@@ -102,13 +102,16 @@ function estimateProductDiscount(
     );
     if (eligibleLines.length === 0) return { targetLines: [], totalAmount: 0 };
 
-    // Cheapest-first: free treatment lands on the shopper's least
-    // expensive eligible item(s) first, consistent with this app's
-    // existing CHEAPEST_MATCHING_LINE convention. getQuantity is a
+    // Cheapest-first by default (mirrors this app's own
+    // CHEAPEST_MATCHING_LINE convention), or most-expensive-first when
+    // the merchant picked that instead — either way, getQuantity is a
     // pool shared across every eligible product, not per-product —
     // "get 2 free" from a 2-product pool never gives away more than 2
     // units total, however they're split across the two lines.
-    const sortedEligibleLines = [...eligibleLines].sort((a, b) => lineSubtotal(a) / a.quantity - lineSubtotal(b) / b.quantity);
+    const allocationDirection = resolved.freeGiftAllocation === "MOST_EXPENSIVE" ? -1 : 1;
+    const sortedEligibleLines = [...eligibleLines].sort(
+      (a, b) => allocationDirection * (lineSubtotal(a) / a.quantity - lineSubtotal(b) / b.quantity),
+    );
 
     let remainingFreeQuantity = resolved.getQuantity ?? Infinity;
     const allocations: { line: ContextCartLine; quantity: number; unitPrice: number }[] = [];

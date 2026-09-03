@@ -18,6 +18,7 @@ export interface TierBreak {
   exactMatch?: boolean;
   getQuantity?: number;
   freeProductIds?: string[];
+  freeGiftAllocation?: "CHEAPEST" | "MOST_EXPENSIVE";
 }
 
 export interface ProductReward {
@@ -85,7 +86,14 @@ export function resolveDiscountValue(
     minimumValue?: number;
   },
   metrics: { quantity: number; subtotal: number },
-): { value: DiscountValue; maxDiscountAmount?: number; name?: string; getQuantity?: number; freeProductIds?: string[] } | null {
+): {
+  value: DiscountValue;
+  maxDiscountAmount?: number;
+  name?: string;
+  getQuantity?: number;
+  freeProductIds?: string[];
+  freeGiftAllocation?: "CHEAPEST" | "MOST_EXPENSIVE";
+} | null {
   if (reward.minimumValue !== undefined && reward.minimumValue > 0) {
     const minimumMetricValue = reward.minimumMetric === "cart.subtotal" ? metrics.subtotal : metrics.quantity;
     if (minimumMetricValue < reward.minimumValue) return null;
@@ -99,7 +107,14 @@ export function resolveDiscountValue(
     const getQuantity =
       tier.getQuantity !== undefined ? Math.max(0, Math.min(tier.getQuantity, metricValue - tier.minValue + tier.getQuantity)) : undefined;
 
-    return { value: tier.value, maxDiscountAmount: tier.maxDiscountAmount, name: tier.name, getQuantity, freeProductIds: tier.freeProductIds };
+    return {
+      value: tier.value,
+      maxDiscountAmount: tier.maxDiscountAmount,
+      name: tier.name,
+      getQuantity,
+      freeProductIds: tier.freeProductIds,
+      freeGiftAllocation: tier.freeGiftAllocation,
+    };
   }
 
   return { value: reward.value, maxDiscountAmount: reward.maxDiscountAmount };

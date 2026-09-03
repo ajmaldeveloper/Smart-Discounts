@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
-import { archiveCampaign, deleteCampaignEverywhere, publishCampaign, unpublishCampaign } from "./discount-publish.server";
+import { archiveCampaign, deleteCampaignEverywhere, publishCampaign, resumeCampaign, unpublishCampaign } from "./discount-publish.server";
 
 afterEach(async () => {
   await db.shop.deleteMany({ where: { domain: { startsWith: "publish-test-" } } });
@@ -129,6 +129,55 @@ describe("publishCampaign — scheduling", () => {
 
     expect(result.ok).toBe(true);
     expect(sawStartsAtKey).toBe(false);
+  });
+});
+
+describe("publishCampaign / resumeCampaign — hasUnpublishedChanges must clear, not stay spuriously true", () => {
+  it("publishCampaign sets updatedAt to the exact same instant as publishedAt", async () => {
+    // A separately-evaluated `new Date()` for updatedAt (Prisma's default
+    // @updatedAt behavior) lands a few milliseconds after publishedAt's
+    // own `new Date()`, permanently tripping campaign.updatedAt >
+    // campaign.publishedAt — the app.campaigns.$id.tsx loader's
+    // hasUnpublishedChanges check — right after every publish, even with
+    // zero actual edits. They must be pinned to one shared instant.
+    const shop = await makeShop();
+    const campaign = await makeCampaign(shop.id);
+
+    const admin = fakeAdmin((query) => {
+      if (query.includes("WinsletDiscountAutomaticCreate")) {
+        return { data: { discountAutomaticAppCreate: { automaticAppDiscount: { discountId: "gid://shopify/DiscountAutomaticNode/1" }, userErrors: [] } } };
+      }
+      throw new Error(`unexpected query: ${query}`);
+    });
+
+    const result = await publishCampaign(admin, campaign);
+    expect(result.ok).toBe(true);
+
+    const updated = await db.campaign.findUniqueOrThrow({ where: { id: campaign.id } });
+    expect(updated.publishedAt).not.toBeNull();
+    expect(updated.updatedAt.getTime()).toBe(updated.publishedAt!.getTime());
+  });
+
+  it("resumeCampaign re-pins updatedAt to the existing publishedAt instead of letting it drift past it", async () => {
+    const shop = await makeShop();
+    const publishedAt = new Date(Date.now() - 60_000);
+    const created = await makeCampaign(shop.id, { shopifyDiscountId: "gid://shopify/DiscountAutomaticNode/1" });
+    const campaign = await db.campaign.update({ where: { id: created.id }, data: { status: "PAUSED", publishedAt } });
+
+    const admin = fakeAdmin((query) => {
+      if (query.includes("WinsletDiscountAutomaticActivate")) {
+        return { data: { discountAutomaticActivate: { userErrors: [] } } };
+      }
+      throw new Error(`unexpected query: ${query}`);
+    });
+
+    const result = await resumeCampaign(admin, campaign);
+    expect(result.ok).toBe(true);
+
+    const updated = await db.campaign.findUniqueOrThrow({ where: { id: campaign.id } });
+    expect(updated.status).toBe("ACTIVE");
+    expect(updated.publishedAt!.getTime()).toBe(publishedAt.getTime());
+    expect(updated.updatedAt.getTime()).toBe(publishedAt.getTime());
   });
 });
 

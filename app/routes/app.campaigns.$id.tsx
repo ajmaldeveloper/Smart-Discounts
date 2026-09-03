@@ -729,20 +729,28 @@ export default function CampaignEditor() {
           </s-button>
         ))}
 
-      {campaign.status === "ACTIVE" && campaign.hasUnpublishedChanges && (
-        <s-button
-          slot="primary-action"
-          variant="primary"
-          onClick={publish}
-          loading={isPublishing}
-          disabled={isPublishing || hasAnyUnsavedTabEdits}
-          accessibilityLabel={
-            hasAnyUnsavedTabEdits ? "Save your pending changes on this tab before republishing" : "Push your saved changes live to Shopify"
-          }
-        >
-          Republish
-        </s-button>
-      )}
+      {campaign.status === "ACTIVE" &&
+        (campaign.hasUnpublishedChanges ? (
+          <s-button
+            slot="primary-action"
+            variant="primary"
+            onClick={publish}
+            loading={isPublishing}
+            disabled={isPublishing || hasAnyUnsavedTabEdits}
+            accessibilityLabel={
+              hasAnyUnsavedTabEdits ? "Save your pending changes on this tab before republishing" : "Push your saved changes live to Shopify"
+            }
+          >
+            Republish
+          </s-button>
+        ) : (
+          // Nothing to push — a disabled "Published" button instead of an
+          // empty slot, so it still reads as "this campaign is live and
+          // in sync" at a glance, matching Republish's own visible spot.
+          <s-button slot="primary-action" variant="primary" disabled accessibilityLabel="Already live — no changes to push">
+            Published
+          </s-button>
+        ))}
 
       <s-button
         slot="secondary-actions"

@@ -503,9 +503,23 @@ function BogoEditor({
                 </s-box>
               );
             })}
-            <s-text color="subdued">
-              &ldquo;Get free&rdquo; units are shared across all {freeProductIds.length} products above — whichever the shopper has, cheapest first.
-            </s-text>
+
+            {freeProductIds.length > 1 ? (
+              <s-select
+                label="When the shopper has more than one of these"
+                value={tier.freeGiftAllocation ?? "CHEAPEST"}
+                onChange={(event: ControlEvent) =>
+                  onChange({ ...tier, freeGiftAllocation: readValue(event) === "MOST_EXPENSIVE" ? "MOST_EXPENSIVE" : undefined })
+                }
+              >
+                <s-option value="CHEAPEST">Give away the cheapest one first</s-option>
+                <s-option value="MOST_EXPENSIVE">Give away the most expensive one first</s-option>
+              </s-select>
+            ) : (
+              <s-text color="subdued">
+                &ldquo;Get free&rdquo; units are shared across all {freeProductIds.length} products above.
+              </s-text>
+            )}
           </s-stack>
         ) : (
           <s-text tone="neutral">No products chosen — the cheapest matching item will be free instead.</s-text>
