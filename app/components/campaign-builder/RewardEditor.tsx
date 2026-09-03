@@ -445,7 +445,7 @@ function BogoEditor({
 
   return (
     <s-stack direction="block" gap="base">
-      <s-grid gridTemplateColumns={`repeat(${hideName ? 2 : 3}, minmax(120px, 1fr))`} gap="base" alignItems="end">
+      <s-grid gridTemplateColumns="repeat(2, minmax(120px, 1fr))" gap="base" alignItems="end">
         <s-number-field
           label="Buy"
           min={0}
@@ -459,9 +459,9 @@ function BogoEditor({
           value={String(getQuantity)}
           onInput={(event: ControlEvent) => rebuild(buyQuantity, Number(readValue(event)) || 1)}
         />
-
-        {!hideName && <NameField value={tier.name} onChange={(name) => onChange({ ...tier, name })} />}
       </s-grid>
+
+      {!hideName && <NameField value={tier.name} onChange={(name) => onChange({ ...tier, name })} />}
 
       <s-text color="subdued">
         Free units scale in gradually past the buy quantity — e.g. buying {buyQuantity + 1} already gets 1 free, up to {getQuantity} free at{" "}
@@ -512,8 +512,8 @@ function BogoEditor({
                   onChange({ ...tier, freeGiftAllocation: readValue(event) === "MOST_EXPENSIVE" ? "MOST_EXPENSIVE" : undefined })
                 }
               >
-                <s-option value="CHEAPEST">Give away the cheapest one first</s-option>
-                <s-option value="MOST_EXPENSIVE">Give away the most expensive one first</s-option>
+                <s-option value="CHEAPEST">Cheapest first</s-option>
+                <s-option value="MOST_EXPENSIVE">Most expensive first</s-option>
               </s-select>
             ) : (
               <s-text color="subdued">
