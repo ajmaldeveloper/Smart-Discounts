@@ -715,7 +715,7 @@ export default function CampaignEditor() {
       </s-link>
 
       <s-badge slot="accessory" tone={statusBadgeTone(displayStatus(campaign))}>
-        {campaign.kind} · {displayStatus(campaign)}
+        {`${campaign.kind} · ${displayStatus(campaign)}`}
       </s-badge>
 
       {campaign.status !== "ACTIVE" &&
