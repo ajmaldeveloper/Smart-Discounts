@@ -18,20 +18,6 @@ export default async function handleRequest(
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
 
-  // app.tsx's own ErrorBoundary already redirects a 404 to /app, but
-  // only client-side (via useEffect) — the very FIRST full-page load of
-  // a bad URL (a fresh tab, a stale bookmark, not a client-side
-  // transition inside an already-hydrated app) never runs that effect,
-  // so the browser would otherwise sit on a blank 404 document until JS
-  // hydrates. Converting it into a real HTTP redirect here happens
-  // before any rendering, so there's no flash at all. Scoped to /app/*
-  // only — webhooks/auth/health have their own real meaning for a 404
-  // and must never be redirected.
-  if (responseStatusCode === 404 && new URL(request.url).pathname.startsWith("/app")) {
-    return new Response(null, { status: 302, headers: { Location: "/app" } });
-  }
-
-
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"
