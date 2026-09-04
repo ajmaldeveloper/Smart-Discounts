@@ -23,10 +23,19 @@
  * that problem: the browser auto-upgrades any matching custom element
  * the moment it appears in the DOM, no matter how it got there.
  *
+ * Some themes go further and morph/patch the drawer's existing DOM
+ * against fresh server-rendered HTML (rather than a full innerHTML
+ * replace) — since the server-rendered placement tag has no children
+ * of its own, a morph can strip everything this script built without
+ * ever calling connectedCallback again (the top-level node itself is
+ * preserved, just its contents get reconciled away). A MutationObserver
+ * on each instance watches for exactly that and rebuilds immediately.
+ *
  * Everything it needs (the real campaign threshold, the merchant's
- * chosen colors/messages) comes live from the App Proxy at connect
- * time — nothing is hand-typed into the theme, so it can never drift
- * out of sync with the real discount.
+ * chosen colors/messages/sizing) comes live from the App Proxy at
+ * connect time — nothing is hand-typed into the theme, so it can never
+ * drift out of sync with the real discount or the Storefront settings
+ * page.
  *
  * Cart-change reactivity uses three independent signals, since theme
  * cart-update conventions vary and no single one is universal:
@@ -44,6 +53,8 @@
 
   var CONFIG_REFRESH_MS = 60000;
   var CART_ENDPOINT_PATTERN = /\/cart\/(add|update|change|clear)(\.js)?(\?|$)/;
+  var MOBILE_BREAKPOINT = 640; // matches this developer's own product-options app
+  var STYLE_ELEMENT_ID = "winslet-fsb-shared-style";
   // Cached OUTSIDE the class, shared by every instance on the page —
   // a theme's cart drawer commonly re-renders its own markup via AJAX
   // (innerHTML replacement) on every cart change, which destroys and
@@ -54,16 +65,56 @@
   // from whatever the page already knows, then quietly revalidates.
   var sharedConfig = null;
 
-  function formatRemaining(amount, metric, currency) {
-    if (metric === "cart.quantity") {
-      var count = Math.ceil(amount);
-      return count + (count === 1 ? " item" : " items");
-    }
+  function ensureSharedStyle() {
+    if (document.getElementById(STYLE_ELEMENT_ID)) return;
+    var style = document.createElement("style");
+    style.id = STYLE_ELEMENT_ID;
+    style.textContent =
+      "winslet-free-shipping-bar .winslet-fsb__track{height:var(--winslet-fsb-thickness);border-radius:var(--winslet-fsb-roundness);overflow:hidden;}" +
+      "winslet-free-shipping-bar .winslet-fsb__fill{height:100%;width:0%;border-radius:var(--winslet-fsb-roundness);box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);transition:width 0.3s ease,background-color 0.3s ease;}" +
+      "winslet-free-shipping-bar .winslet-fsb__message{margin:var(--winslet-fsb-gap) 0 0;font-size:var(--winslet-fsb-font-size);text-align:center;}" +
+      "@media (max-width:" +
+      MOBILE_BREAKPOINT +
+      "px){" +
+      "winslet-free-shipping-bar .winslet-fsb__track{height:var(--winslet-fsb-mobile-thickness);border-radius:var(--winslet-fsb-mobile-roundness);}" +
+      "winslet-free-shipping-bar .winslet-fsb__fill{border-radius:var(--winslet-fsb-mobile-roundness);}" +
+      "winslet-free-shipping-bar .winslet-fsb__message{margin-top:var(--winslet-fsb-mobile-gap);font-size:var(--winslet-fsb-mobile-font-size);}" +
+      "}";
+    document.head.appendChild(style);
+  }
+
+  // {remaining} is deliberately a bare number, never a formatted money
+  // string — Intl's own "$" rendering varies by locale (e.g. "US$" to
+  // disambiguate from other dollar currencies, merchant-reported as
+  // confusing) and baking in a symbol would leave a merchant with no
+  // way to control placement, spacing, or whether one shows at all for
+  // a quantity-based threshold. {currency_symbol}/{currency_code} are
+  // separate tokens the merchant composes into their own message text.
+  function formatRemainingNumber(amount, metric) {
+    return metric === "cart.quantity" ? String(Math.ceil(amount)) : amount.toFixed(2);
+  }
+
+  function currencySymbolFor(currency) {
     try {
-      return new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "USD" }).format(amount);
+      var parts = new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: currency || "USD",
+        currencyDisplay: "narrowSymbol",
+      }).formatToParts(0);
+      var currencyPart = parts.find(function (part) {
+        return part.type === "currency";
+      });
+      return currencyPart ? currencyPart.value : currency || "";
     } catch (error) {
-      return (currency || "") + " " + amount.toFixed(2);
+      return currency || "";
     }
+  }
+
+  function applyTokens(template, remaining, metric, currency) {
+    return template
+      .replace(/\{remaining\}/g, formatRemainingNumber(remaining, metric))
+      .replace(/\{currency_symbol\}/g, currencySymbolFor(currency))
+      .replace(/\{currency_code\}/g, currency || "");
   }
 
   class Bar extends HTMLElement {
@@ -71,19 +122,10 @@
       this.proxyRoot = this.dataset.proxyRoot || "/apps/winslet";
       this.currency = this.dataset.currency || "";
       this.config = null;
-      this.style.display = "none";
 
-      this.innerHTML =
-        '<div class="winslet-fsb__track" style="border-radius:999px;height:8px;overflow:hidden;">' +
-        '<div class="winslet-fsb__fill" style="height:100%;border-radius:999px;width:0%;' +
-        "box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);transition:width 0.3s ease,background-color 0.3s ease;" +
-        '"></div>' +
-        "</div>" +
-        '<p class="winslet-fsb__message" style="margin:8px 0 0;font-size:14px;text-align:center;"></p>';
-      this.trackEl = this.querySelector(".winslet-fsb__track");
-      this.fillEl = this.querySelector(".winslet-fsb__fill");
-      this.messageEl = this.querySelector(".winslet-fsb__message");
-      this.style.cssText += "display:none;padding:8px 16px;";
+      ensureSharedStyle();
+      this.buildMarkup();
+      this.watchForMorph();
 
       if (sharedConfig) {
         // Already known from an earlier instance on this page — show
@@ -108,6 +150,41 @@
       clearInterval(this.configInterval);
       document.removeEventListener("cart:updated", this._onCartEvent);
       document.removeEventListener("cart:refresh", this._onCartEvent);
+      if (this.morphObserver) this.morphObserver.disconnect();
+    }
+
+    /** (Re)builds the internal track/fill/message DOM — safe to call repeatedly, e.g. after a theme morph strips it. */
+    buildMarkup() {
+      this.style.display = "none";
+      this.style.cssText += "display:none;padding:8px 16px;";
+      this.innerHTML =
+        '<div class="winslet-fsb__track"><div class="winslet-fsb__fill"></div></div>' + '<p class="winslet-fsb__message"></p>';
+      this.trackEl = this.querySelector(".winslet-fsb__track");
+      this.fillEl = this.querySelector(".winslet-fsb__fill");
+      this.messageEl = this.querySelector(".winslet-fsb__message");
+    }
+
+    /**
+     * Some themes morph/patch this element's existing DOM against fresh
+     * server-rendered HTML instead of a full innerHTML replace — since
+     * the server-rendered tag has no children, that can silently strip
+     * everything buildMarkup() created without connectedCallback firing
+     * again (the top-level node is preserved, only its contents are
+     * reconciled away). Watching for exactly that and rebuilding
+     * immediately is far more reliable than hoping a cart event fires
+     * again soon.
+     */
+    watchForMorph() {
+      this.morphObserver = new MutationObserver(() => {
+        if (!this.trackEl || !this.contains(this.trackEl)) {
+          this.buildMarkup();
+          if (this.config) {
+            this.applyConfig(this.config);
+            this.refreshCart();
+          }
+        }
+      });
+      this.morphObserver.observe(this, { childList: true });
     }
 
     /** Detects AJAX cart mutations on themes that never dispatch cart:updated/cart:refresh. */
@@ -150,6 +227,14 @@
         return;
       }
       this.trackEl.style.backgroundColor = config.trackColor;
+      this.style.setProperty("--winslet-fsb-thickness", config.barThickness + "px");
+      this.style.setProperty("--winslet-fsb-mobile-thickness", config.mobileBarThickness + "px");
+      this.style.setProperty("--winslet-fsb-roundness", config.barRoundness + "px");
+      this.style.setProperty("--winslet-fsb-mobile-roundness", config.mobileBarRoundness + "px");
+      this.style.setProperty("--winslet-fsb-font-size", config.messageFontSize + "px");
+      this.style.setProperty("--winslet-fsb-mobile-font-size", config.mobileMessageFontSize + "px");
+      this.style.setProperty("--winslet-fsb-gap", config.barMessageGap + "px");
+      this.style.setProperty("--winslet-fsb-mobile-gap", config.mobileBarMessageGap + "px");
       this.style.display = "block";
     }
 
@@ -178,8 +263,8 @@
 
       this.messageEl.textContent =
         percent >= 100
-          ? config.completeMessage
-          : config.progressMessage.replace("{remaining}", formatRemaining(remaining, config.minimumMetric, this.currency));
+          ? applyTokens(config.completeMessage, 0, config.minimumMetric, this.currency)
+          : applyTokens(config.progressMessage, remaining, config.minimumMetric, this.currency);
     }
   }
 

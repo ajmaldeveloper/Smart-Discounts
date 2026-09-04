@@ -8,6 +8,12 @@
  * apps.proxy.free-shipping.tsx (the App Proxy endpoint the storefront's
  * app-embed script calls) — always through normalizeWidgetSettings, so
  * malformed/partial stored JSON never breaks either caller.
+ *
+ * The mobile-vs-desktop field pairing (mobileBarThickness vs.
+ * barThickness, etc.) mirrors this developer's own product-options app
+ * (see OptionSetDesignConfig) — a flat value per breakpoint rather than
+ * a nested { desktop, mobile } shape, switched via a max-width:640px
+ * media query on the storefront (matching that app's own breakpoint).
  */
 
 export interface FreeShippingBarSettings {
@@ -26,13 +32,31 @@ export interface FreeShippingBarSettings {
   // switches from startColor to nearColor. 100% (threshold met)
   // always uses reachedColor regardless of this value.
   nearThresholdPercent: number;
-  // Shown while below the threshold — "{remaining}" is replaced with
-  // the formatted amount/quantity still needed, computed client-side
-  // (the storefront script knows the shopper's live cart, this stored
-  // string never does).
+  // Shown while below the threshold. Three tokens, all substituted
+  // client-side (the storefront script knows the shopper's live cart
+  // and locale, this stored string never does): "{remaining}" — a bare
+  // number, never pre-formatted with a currency symbol, so the
+  // merchant fully controls placement/spacing/whether one shows at
+  // all for a quantity-based threshold; "{currency_symbol}" and
+  // "{currency_code}" — e.g. "$" and "USD", composed in by the
+  // merchant however they like ("{currency_symbol}{remaining}" vs.
+  // "{remaining} {currency_code}").
   progressMessage: string;
   // Shown once the threshold is met.
   completeMessage: string;
+  // Track height, in px.
+  barThickness: number;
+  mobileBarThickness: number;
+  // Track/fill corner radius, in px — a value >= half the thickness
+  // reads as a full pill (the original hardcoded look).
+  barRoundness: number;
+  mobileBarRoundness: number;
+  // The message paragraph's font size, in px.
+  messageFontSize: number;
+  mobileMessageFontSize: number;
+  // Vertical space between the bar and its message, in px.
+  barMessageGap: number;
+  mobileBarMessageGap: number;
 }
 
 export interface WidgetSettings {
@@ -45,8 +69,16 @@ const DEFAULT_FREE_SHIPPING_BAR: FreeShippingBarSettings = {
   nearColor: "#ffc453",
   reachedColor: "#008060",
   nearThresholdPercent: 75,
-  progressMessage: "Spend {remaining} more for free shipping!",
+  progressMessage: "Spend {currency_symbol}{remaining} more for free shipping!",
   completeMessage: "You've unlocked free shipping!",
+  barThickness: 8,
+  mobileBarThickness: 8,
+  barRoundness: 999,
+  mobileBarRoundness: 999,
+  messageFontSize: 14,
+  mobileMessageFontSize: 14,
+  barMessageGap: 8,
+  mobileBarMessageGap: 8,
 };
 
 const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
@@ -57,6 +89,10 @@ function normalizeHexColor(raw: unknown, fallback: string): string {
 
 function normalizeMessage(raw: unknown, fallback: string): string {
   return typeof raw === "string" && raw.trim() ? raw.trim() : fallback;
+}
+
+function normalizePixels(raw: unknown, fallback: number, max: number): number {
+  return typeof raw === "number" && Number.isFinite(raw) ? Math.min(max, Math.max(0, raw)) : fallback;
 }
 
 /** Validates and repairs an arbitrary parsed-JSON value into a well-formed WidgetSettings, falling back field-by-field rather than rejecting the whole object. */
@@ -81,6 +117,14 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
       nearThresholdPercent,
       progressMessage: normalizeMessage(barRecord.progressMessage, DEFAULT_FREE_SHIPPING_BAR.progressMessage),
       completeMessage: normalizeMessage(barRecord.completeMessage, DEFAULT_FREE_SHIPPING_BAR.completeMessage),
+      barThickness: normalizePixels(barRecord.barThickness, DEFAULT_FREE_SHIPPING_BAR.barThickness, 48),
+      mobileBarThickness: normalizePixels(barRecord.mobileBarThickness, DEFAULT_FREE_SHIPPING_BAR.mobileBarThickness, 48),
+      barRoundness: normalizePixels(barRecord.barRoundness, DEFAULT_FREE_SHIPPING_BAR.barRoundness, 999),
+      mobileBarRoundness: normalizePixels(barRecord.mobileBarRoundness, DEFAULT_FREE_SHIPPING_BAR.mobileBarRoundness, 999),
+      messageFontSize: normalizePixels(barRecord.messageFontSize, DEFAULT_FREE_SHIPPING_BAR.messageFontSize, 48),
+      mobileMessageFontSize: normalizePixels(barRecord.mobileMessageFontSize, DEFAULT_FREE_SHIPPING_BAR.mobileMessageFontSize, 48),
+      barMessageGap: normalizePixels(barRecord.barMessageGap, DEFAULT_FREE_SHIPPING_BAR.barMessageGap, 64),
+      mobileBarMessageGap: normalizePixels(barRecord.mobileBarMessageGap, DEFAULT_FREE_SHIPPING_BAR.mobileBarMessageGap, 64),
     },
   };
 }

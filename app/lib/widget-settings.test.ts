@@ -12,6 +12,14 @@ describe("normalizeWidgetSettings", () => {
         nearThresholdPercent: 60,
         progressMessage: "Almost there: {remaining} left",
         completeMessage: "Free shipping unlocked",
+        barThickness: 10,
+        mobileBarThickness: 6,
+        barRoundness: 4,
+        mobileBarRoundness: 2,
+        messageFontSize: 16,
+        mobileMessageFontSize: 12,
+        barMessageGap: 10,
+        mobileBarMessageGap: 6,
       },
     });
 
@@ -23,6 +31,14 @@ describe("normalizeWidgetSettings", () => {
       nearThresholdPercent: 60,
       progressMessage: "Almost there: {remaining} left",
       completeMessage: "Free shipping unlocked",
+      barThickness: 10,
+      mobileBarThickness: 6,
+      barRoundness: 4,
+      mobileBarRoundness: 2,
+      messageFontSize: 16,
+      mobileMessageFontSize: 12,
+      barMessageGap: 10,
+      mobileBarMessageGap: 6,
     });
   });
 
@@ -32,6 +48,8 @@ describe("normalizeWidgetSettings", () => {
         startColor: "not-a-hex-color",
         nearThresholdPercent: 999,
         progressMessage: "   ",
+        barThickness: -5,
+        mobileBarRoundness: "not-a-number",
       },
     });
 
@@ -40,8 +58,10 @@ describe("normalizeWidgetSettings", () => {
     expect(settings.freeShippingBar.nearColor).toBe("#ffc453");
     expect(settings.freeShippingBar.reachedColor).toBe("#008060");
     expect(settings.freeShippingBar.nearThresholdPercent).toBe(100);
-    expect(settings.freeShippingBar.progressMessage).toBe("Spend {remaining} more for free shipping!");
+    expect(settings.freeShippingBar.progressMessage).toBe("Spend {currency_symbol}{remaining} more for free shipping!");
     expect(settings.freeShippingBar.completeMessage).toBe("You've unlocked free shipping!");
+    expect(settings.freeShippingBar.barThickness).toBe(0);
+    expect(settings.freeShippingBar.mobileBarRoundness).toBe(999);
   });
 
   it("clamps nearThresholdPercent below 0 up to 0", () => {
@@ -49,11 +69,18 @@ describe("normalizeWidgetSettings", () => {
     expect(settings.freeShippingBar.nearThresholdPercent).toBe(0);
   });
 
+  it("clamps a pixel field above its max down to the max", () => {
+    const settings = normalizeWidgetSettings({ freeShippingBar: { barThickness: 500 } });
+    expect(settings.freeShippingBar.barThickness).toBe(48);
+  });
+
   it("returns all defaults for null, undefined, or a non-object", () => {
-    expect(normalizeWidgetSettings(null).freeShippingBar.startColor).toBe("#8c9196");
-    expect(normalizeWidgetSettings(undefined).freeShippingBar.startColor).toBe("#8c9196");
-    expect(normalizeWidgetSettings("garbage").freeShippingBar.startColor).toBe("#8c9196");
-    expect(normalizeWidgetSettings({}).freeShippingBar.startColor).toBe("#8c9196");
+    for (const input of [null, undefined, "garbage", {}]) {
+      const { freeShippingBar } = normalizeWidgetSettings(input);
+      expect(freeShippingBar.startColor).toBe("#8c9196");
+      expect(freeShippingBar.barThickness).toBe(8);
+      expect(freeShippingBar.mobileMessageFontSize).toBe(14);
+    }
   });
 
   it("accepts a short 3-digit hex color", () => {
