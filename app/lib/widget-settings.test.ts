@@ -280,3 +280,89 @@ describe("normalizeWidgetSettings — announcementBar", () => {
     expect(settings.announcementBar.ctaUrl).toBe("/collections/sale");
   });
 });
+
+describe("normalizeWidgetSettings — tierProgressBar", () => {
+  it("normalizes a full valid tierProgressBar config", () => {
+    const settings = normalizeWidgetSettings({
+      tierProgressBar: {
+        trackColor: "#111111",
+        progressColor: "#222222",
+        reachedColor: "#333333",
+        messageTemplate: "Add {remaining} for {discount}!",
+        completeMessage: "{discount} unlocked!",
+        barThickness: 12,
+        barPosition: "bottom",
+      },
+    });
+
+    expect(settings.tierProgressBar.trackColor).toBe("#111111");
+    expect(settings.tierProgressBar.progressColor).toBe("#222222");
+    expect(settings.tierProgressBar.reachedColor).toBe("#333333");
+    expect(settings.tierProgressBar.messageTemplate).toBe("Add {remaining} for {discount}!");
+    expect(settings.tierProgressBar.completeMessage).toBe("{discount} unlocked!");
+    expect(settings.tierProgressBar.barThickness).toBe(12);
+    expect(settings.tierProgressBar.barPosition).toBe("bottom");
+  });
+
+  it("returns defaults for a missing/malformed value", () => {
+    const settings = normalizeWidgetSettings({ tierProgressBar: "garbage" });
+
+    expect(settings.tierProgressBar.trackColor).toBe("#f1f2f3");
+    expect(settings.tierProgressBar.progressColor).toBe("#8c9196");
+    expect(settings.tierProgressBar.reachedColor).toBe("#008060");
+    expect(settings.tierProgressBar.barPosition).toBe("top");
+  });
+});
+
+describe("normalizeWidgetSettings — tierList", () => {
+  it("normalizes a full valid tierList config", () => {
+    const settings = normalizeWidgetSettings({
+      tierList: {
+        heading: "Volume savings",
+        triggerLabel: "View tiers",
+        rowTemplate: "{quantity}+, {discount}",
+        backgroundColor: "#111111",
+        textColor: "#222222",
+        accentColor: "#333333",
+        fontSize: 16,
+        mobileFontSize: 12,
+        paddingTop: 10,
+        paddingBottom: 10,
+        paddingLeft: 10,
+        paddingRight: 10,
+        mobilePaddingTop: 8,
+        mobilePaddingBottom: 8,
+        mobilePaddingLeft: 8,
+        mobilePaddingRight: 8,
+      },
+    });
+
+    expect(settings.tierList).toEqual({
+      heading: "Volume savings",
+      triggerLabel: "View tiers",
+      rowTemplate: "{quantity}+, {discount}",
+      backgroundColor: "#111111",
+      textColor: "#222222",
+      accentColor: "#333333",
+      fontSize: 16,
+      mobileFontSize: 12,
+      paddingTop: 10,
+      paddingBottom: 10,
+      paddingLeft: 10,
+      paddingRight: 10,
+      mobilePaddingTop: 8,
+      mobilePaddingBottom: 8,
+      mobilePaddingLeft: 8,
+      mobilePaddingRight: 8,
+    });
+  });
+
+  it("returns defaults for a missing/malformed value", () => {
+    const settings = normalizeWidgetSettings({ tierList: "garbage" });
+
+    expect(settings.tierList.heading).toBe("Bulk discounts");
+    expect(settings.tierList.triggerLabel).toBe("See bulk pricing");
+    expect(settings.tierList.rowTemplate).toBe("Buy {quantity}+, save {discount}");
+    expect(settings.tierList.backgroundColor).toBe("#ffffff");
+  });
+});

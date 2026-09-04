@@ -80,6 +80,50 @@ export async function getActiveOrderDiscountThreshold(shopId: string): Promise<O
   return { active: false };
 }
 
+export type TieredDiscount =
+  | {
+      active: true;
+      tierMetric: TierMetric;
+      // Ascending by minValue — the shopper's next unmet tier is
+      // always the first one whose minValue exceeds their current
+      // metric value.
+      tiers: Array<{ minValue: number; discountType: DiscountValue["type"]; discountValue: number }>;
+    }
+  | { active: false };
+
+/**
+ * The tier-list/tier-progress widgets' shared data source: the first
+ * ACTIVE campaign whose Product reward has plain volume/quantity tiers
+ * (see reward-types.ts's TierBreak) — "plain" meaning neither a BOGO
+ * tier (getQuantity set) nor a gift-pool tier (freeProductIds set),
+ * both of which are the separate BOGO gift-picker widget's data, not
+ * this "buy more, save more" one. First match wins on the same
+ * reasoning as the other getActive*  functions above.
+ */
+export async function getActiveTieredDiscount(shopId: string): Promise<TieredDiscount> {
+  const campaigns = await db.campaign.findMany({
+    where: { shopId, status: "ACTIVE" },
+    select: { rewardJson: true },
+  });
+
+  for (const campaign of campaigns) {
+    const reward = normalizeRewardConfig(campaign.rewardJson);
+    const rawTiers = reward.product?.tiers;
+    if (!rawTiers || rawTiers.length === 0) continue;
+
+    const plainTiers = rawTiers
+      .filter((tier) => tier.getQuantity === undefined && (tier.freeProductIds?.length ?? 0) === 0)
+      .map((tier) => ({ minValue: tier.minValue, discountType: tier.value.type, discountValue: tier.value.value }))
+      .sort((a, b) => a.minValue - b.minValue);
+
+    if (plainTiers.length > 0) {
+      return { active: true, tierMetric: reward.product?.tierMetric ?? "cart.quantity", tiers: plainTiers };
+    }
+  }
+
+  return { active: false };
+}
+
 export type BogoGiftCampaign =
   | {
       active: true;

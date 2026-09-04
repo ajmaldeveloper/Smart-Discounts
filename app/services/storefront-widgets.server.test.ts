@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import db from "../db.server";
-import { getActiveBogoGiftCampaign, getActiveFreeShippingThreshold, getActiveOrderDiscountThreshold } from "./storefront-widgets.server";
+import {
+  getActiveBogoGiftCampaign,
+  getActiveFreeShippingThreshold,
+  getActiveOrderDiscountThreshold,
+  getActiveTieredDiscount,
+} from "./storefront-widgets.server";
 
 afterEach(async () => {
   await db.shop.deleteMany({ where: { domain: { startsWith: "storefront-widgets-test-" } } });
@@ -230,5 +235,100 @@ describe("getActiveOrderDiscountThreshold", () => {
       minimumMetric: "cart.quantity",
       discountValue: { type: "fixedAmount", value: 10 },
     });
+  });
+});
+
+describe("getActiveTieredDiscount", () => {
+  it("returns inactive when the shop has no campaigns at all", async () => {
+    const shop = await makeShop();
+    expect(await getActiveTieredDiscount(shop.id)).toEqual({ active: false });
+  });
+
+  it("returns the plain volume tiers, sorted ascending, from an ACTIVE campaign", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: {
+        product: {
+          value: { type: "percentage", value: 5 },
+          appliesTo: "ALL_MATCHING_LINES",
+          tierMetric: "cart.quantity",
+          tiers: [
+            { minValue: 6, value: { type: "percentage", value: 20 } },
+            { minValue: 2, value: { type: "percentage", value: 10 } },
+          ],
+        },
+      },
+    });
+
+    expect(await getActiveTieredDiscount(shop.id)).toEqual({
+      active: true,
+      tierMetric: "cart.quantity",
+      tiers: [
+        { minValue: 2, discountType: "percentage", discountValue: 10 },
+        { minValue: 6, discountType: "percentage", discountValue: 20 },
+      ],
+    });
+  });
+
+  it("ignores a PAUSED campaign even with qualifying tiers", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "PAUSED",
+      rewardJson: {
+        product: {
+          value: { type: "percentage", value: 5 },
+          appliesTo: "ALL_MATCHING_LINES",
+          tiers: [{ minValue: 2, value: { type: "percentage", value: 10 } }],
+        },
+      },
+    });
+
+    expect(await getActiveTieredDiscount(shop.id)).toEqual({ active: false });
+  });
+
+  it("excludes BOGO tiers (getQuantity set) and gift-pool tiers (freeProductIds set)", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: {
+        product: {
+          value: { type: "percentage", value: 5 },
+          appliesTo: "ALL_MATCHING_LINES",
+          tiers: [
+            { minValue: 4, value: { type: "percentage", value: 100 }, getQuantity: 1 },
+            { minValue: 3, value: { type: "percentage", value: 100 }, freeProductIds: ["gid://shopify/Product/1"] },
+          ],
+        },
+      },
+    });
+
+    expect(await getActiveTieredDiscount(shop.id)).toEqual({ active: false });
+  });
+
+  it("ignores an ACTIVE campaign with no product tiers at all", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: { order: { value: { type: "percentage", value: 10 }, minimumValue: 50 } },
+    });
+
+    expect(await getActiveTieredDiscount(shop.id)).toEqual({ active: false });
+  });
+
+  it("defaults tierMetric to cart.quantity when unset on the reward", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: {
+        product: {
+          value: { type: "percentage", value: 5 },
+          appliesTo: "ALL_MATCHING_LINES",
+          tiers: [{ minValue: 2, value: { type: "percentage", value: 10 } }],
+        },
+      },
+    });
+
+    expect((await getActiveTieredDiscount(shop.id) as { tierMetric: string }).tierMetric).toBe("cart.quantity");
   });
 });

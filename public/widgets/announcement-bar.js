@@ -19,8 +19,16 @@
   var CONFIG_REFRESH_MS = 60000;
   var MOBILE_BREAKPOINT = 640;
   var STYLE_ELEMENT_ID = "winslet-ab-shared-style";
-  var DISMISS_KEY = "winslet-announcement-dismissed";
   var sharedConfig = null;
+  // Deliberately NOT persisted to localStorage/sessionStorage: a
+  // dismiss should only hide the bar for the CURRENT page view (it
+  // survives a theme's AJAX cart-drawer morph, same as sharedConfig/
+  // sharedCart elsewhere in this file, since that isn't a real
+  // navigation) — a genuine page reload re-runs this whole script from
+  // scratch, resetting this back to false, so the bar always comes
+  // back on the next visit even if the merchant hasn't changed the
+  // message.
+  var sharedDismissed = false;
 
   function ensureSharedStyle() {
     if (document.getElementById(STYLE_ELEMENT_ID)) return;
@@ -106,15 +114,9 @@
         this.style.display = "none";
         return;
       }
-      if (window.localStorage) {
-        try {
-          if (window.localStorage.getItem(DISMISS_KEY) === config.message) {
-            this.style.display = "none";
-            return;
-          }
-        } catch (error) {
-          /* localStorage unavailable (private mode, etc.) — just always show. */
-        }
+      if (sharedDismissed) {
+        this.style.display = "none";
+        return;
       }
 
       this.style.backgroundColor = config.backgroundColor;
@@ -151,12 +153,8 @@
         dismiss.setAttribute("aria-label", "Dismiss");
         dismiss.textContent = "×";
         dismiss.addEventListener("click", () => {
+          sharedDismissed = true;
           this.style.display = "none";
-          try {
-            if (window.localStorage) window.localStorage.setItem(DISMISS_KEY, config.message);
-          } catch (error) {
-            /* localStorage unavailable — dismissal just won't be remembered. */
-          }
         });
         this.appendChild(dismiss);
       }

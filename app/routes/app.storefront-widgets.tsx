@@ -13,6 +13,8 @@ import {
   type BogoGiftSettings,
   type FreeShippingBarSettings,
   type OrderDiscountBarSettings,
+  type TierListSettings,
+  type TierProgressBarSettings,
 } from "../lib/widget-settings";
 
 type ActionData = { error?: string; notice?: string };
@@ -162,6 +164,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     bogoGift: settings.bogoGift,
     announcementBar: settings.announcementBar,
     orderDiscountBar: settings.orderDiscountBar,
+    tierProgressBar: settings.tierProgressBar,
+    tierList: settings.tierList,
   };
 };
 
@@ -169,14 +173,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const widgetKeyRaw = formData.get("widgetKey");
-  const widgetKey =
-    widgetKeyRaw === "bogoGift"
-      ? "bogoGift"
-      : widgetKeyRaw === "announcementBar"
-        ? "announcementBar"
-        : widgetKeyRaw === "orderDiscountBar"
-          ? "orderDiscountBar"
-          : "freeShippingBar";
+  const validWidgetKeys = ["bogoGift", "announcementBar", "orderDiscountBar", "tierProgressBar", "tierList"] as const;
+  const widgetKey = (validWidgetKeys as readonly string[]).includes(String(widgetKeyRaw))
+    ? (widgetKeyRaw as (typeof validWidgetKeys)[number])
+    : "freeShippingBar";
 
   const shop = await db.shop.findUnique({ where: { domain: session.shop } });
   const current = normalizeWidgetSettings(shop?.widgetSettingsJson);
@@ -218,6 +218,77 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.shop.update({
       where: { domain: session.shop },
       data: { widgetSettingsJson: { ...current, announcementBar } as unknown as object },
+    });
+
+    return { notice: "Storefront widget settings saved." } satisfies ActionData;
+  }
+
+  if (widgetKey === "tierList") {
+    const heading = String(formData.get("heading") ?? "").trim();
+    const triggerLabel = String(formData.get("triggerLabel") ?? "").trim();
+    const rowTemplate = String(formData.get("rowTemplate") ?? "").trim();
+    const backgroundColor = String(formData.get("backgroundColor") ?? "").trim();
+    const textColor = String(formData.get("textColor") ?? "").trim();
+    const accentColor = String(formData.get("accentColor") ?? "").trim();
+    const fontSize = Number(String(formData.get("fontSize") ?? "").trim());
+    const mobileFontSize = Number(String(formData.get("mobileFontSize") ?? "").trim());
+
+    if (!heading) return { error: "Enter a heading." } satisfies ActionData;
+    if (!triggerLabel) return { error: "Enter a trigger label." } satisfies ActionData;
+    if (!rowTemplate) return { error: "Enter a row template." } satisfies ActionData;
+    for (const [label, value] of [
+      ["Background", backgroundColor],
+      ["Text", textColor],
+      ["Accent", accentColor],
+    ] as const) {
+      if (!HEX_COLOR.test(value)) return { error: `${label} color must be a valid hex color (e.g. #008060).` } satisfies ActionData;
+    }
+    if (!Number.isFinite(fontSize) || fontSize < 0 || fontSize > 48) return { error: "Font size must be a number between 0 and 48." } satisfies ActionData;
+    if (!Number.isFinite(mobileFontSize) || mobileFontSize < 0 || mobileFontSize > 48) {
+      return { error: "Mobile font size must be a number between 0 and 48." } satisfies ActionData;
+    }
+
+    const paddingFieldNames = [
+      "paddingTop",
+      "paddingBottom",
+      "paddingLeft",
+      "paddingRight",
+      "mobilePaddingTop",
+      "mobilePaddingBottom",
+      "mobilePaddingLeft",
+      "mobilePaddingRight",
+    ] as const;
+    const padding: Record<string, number> = {};
+    for (const key of paddingFieldNames) {
+      const parsed = Number(String(formData.get(key) ?? "").trim());
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 200) {
+        return { error: "Padding fields must be numbers between 0 and 200." } satisfies ActionData;
+      }
+      padding[key] = parsed;
+    }
+
+    const tierList: TierListSettings = {
+      heading,
+      triggerLabel,
+      rowTemplate,
+      backgroundColor,
+      textColor,
+      accentColor,
+      fontSize,
+      mobileFontSize,
+      paddingTop: padding.paddingTop,
+      paddingBottom: padding.paddingBottom,
+      paddingLeft: padding.paddingLeft,
+      paddingRight: padding.paddingRight,
+      mobilePaddingTop: padding.mobilePaddingTop,
+      mobilePaddingBottom: padding.mobilePaddingBottom,
+      mobilePaddingLeft: padding.mobilePaddingLeft,
+      mobilePaddingRight: padding.mobilePaddingRight,
+    };
+
+    await db.shop.update({
+      where: { domain: session.shop },
+      data: { widgetSettingsJson: { ...current, tierList } as unknown as object },
     });
 
     return { notice: "Storefront widget settings saved." } satisfies ActionData;
@@ -305,6 +376,36 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.shop.update({
       where: { domain: session.shop },
       data: { widgetSettingsJson: { ...current, orderDiscountBar } as unknown as object },
+    });
+  } else if (widgetKey === "tierProgressBar") {
+    const trackColor = String(formData.get("trackColor") ?? "").trim();
+    const progressColor = String(formData.get("progressColor") ?? "").trim();
+    const reachedColor = String(formData.get("reachedColor") ?? "").trim();
+    const messageTemplate = String(formData.get("messageTemplate") ?? "").trim();
+    const completeMessage = String(formData.get("completeMessage") ?? "").trim();
+
+    for (const [label, value] of [
+      ["Background", trackColor],
+      ["Progress", progressColor],
+      ["Reached", reachedColor],
+    ] as const) {
+      if (!HEX_COLOR.test(value)) return { error: `${label} color must be a valid hex color (e.g. #008060).` } satisfies ActionData;
+    }
+    if (!messageTemplate) return { error: "Enter a progress message." } satisfies ActionData;
+    if (!completeMessage) return { error: "Enter a complete message." } satisfies ActionData;
+
+    const tierProgressBar: TierProgressBarSettings = {
+      ...sizing,
+      trackColor,
+      progressColor,
+      reachedColor,
+      messageTemplate,
+      completeMessage,
+    };
+
+    await db.shop.update({
+      where: { domain: session.shop },
+      data: { widgetSettingsJson: { ...current, tierProgressBar } as unknown as object },
     });
   } else {
     const trackColor = String(formData.get("trackColor") ?? "").trim();
@@ -807,6 +908,115 @@ function OrderDiscountBarSection({ initial }: { initial: OrderDiscountBarSetting
   );
 }
 
+function TierProgressBarSection({ initial }: { initial: TierProgressBarSettings }) {
+  const actionData = useActionData() as ActionData | undefined;
+  const navigation = useNavigation();
+  const submit = useSubmit();
+  const shopify = useAppBridge();
+
+  const [draft, setDraft] = useState<TierProgressBarSettings>(initial);
+  const update = <K extends keyof TierProgressBarSettings>(key: K, value: TierProgressBarSettings[K]) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const pending = navigation.state !== "idle" && navigation.formData?.get("widgetKey") === "tierProgressBar";
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(initial);
+
+  useEffect(() => {
+    if (!actionData || pending) return;
+    if (actionData.error) shopify.toast.show(actionData.error, { isError: true });
+    else if (actionData.notice) shopify.toast.show(actionData.notice, { duration: 2400 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionData]);
+
+  return (
+    <s-section heading="Tier progress bar">
+      <s-stack direction="block" gap="base">
+        <s-paragraph>
+          Shows live progress toward every tier of your active volume/quantity discount, with a tick mark for each
+          breakpoint — always in sync with the real discount, no manual re-entry.
+        </s-paragraph>
+
+        <AddToStoreCallout modalId="tier-progress-snippet-modal" />
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Content</s-text>
+
+            <s-text-field
+              label="Progress message"
+              details="Shown below the highest tier. Tokens: {remaining} (to the next tier), {currency_symbol}, {currency_code}, {discount} (the next tier's %/amount)."
+              value={draft.messageTemplate}
+              onInput={(event: ControlEvent) => update("messageTemplate", readValue(event))}
+            />
+
+            <s-text-field
+              label="Complete message"
+              details="Shown once the highest tier is met. Token: {discount} (the highest tier's %/amount)."
+              value={draft.completeMessage}
+              onInput={(event: ControlEvent) => update("completeMessage", readValue(event))}
+            />
+          </s-stack>
+        </s-box>
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Style</s-text>
+
+            <s-grid gridTemplateColumns="repeat(2, minmax(160px, 1fr))" gap="base">
+              <s-color-field
+                label="Background color"
+                value={draft.trackColor}
+                onInput={(event: ControlEvent) => update("trackColor", readValue(event))}
+              />
+              <s-color-field
+                label="Progress color"
+                value={draft.progressColor}
+                onInput={(event: ControlEvent) => update("progressColor", readValue(event))}
+              />
+              <s-color-field
+                label="Reached color"
+                value={draft.reachedColor}
+                onInput={(event: ControlEvent) => update("reachedColor", readValue(event))}
+              />
+            </s-grid>
+
+            <BarSizingFields draft={draft} update={update} />
+          </s-stack>
+        </s-box>
+
+        <s-stack direction="inline" justifyContent="end">
+          <s-button
+            variant="primary"
+            loading={pending}
+            disabled={pending || !isDirty}
+            onClick={() => {
+              const data = new FormData();
+              data.set("widgetKey", "tierProgressBar");
+              for (const [key, value] of Object.entries(draft)) data.set(key, String(value));
+              submit(data, { method: "post" });
+            }}
+          >
+            Save
+          </s-button>
+        </s-stack>
+      </s-stack>
+
+      <SnippetModal
+        id="tier-progress-snippet-modal"
+        heading="Tier progress bar — snippet code"
+        loaderFile="tier-progress-bar.js"
+        placements={[
+          {
+            tag: "winslet-tier-progress-bar",
+            title: "Paste wherever you want it to show",
+            description: "Cart drawer, cart page, anywhere — paste it as many times as you like.",
+          },
+        ]}
+      />
+    </s-section>
+  );
+}
+
 function BogoGiftSection({ initial }: { initial: BogoGiftSettings }) {
   const actionData = useActionData() as ActionData | undefined;
   const navigation = useNavigation();
@@ -1104,7 +1314,156 @@ function AnnouncementBarSection({ initial }: { initial: AnnouncementBarSettings 
   );
 }
 
-type WidgetKey = "freeShippingBar" | "bogoGift" | "announcementBar" | "orderDiscountBar";
+function TierListSection({ initial }: { initial: TierListSettings }) {
+  const actionData = useActionData() as ActionData | undefined;
+  const navigation = useNavigation();
+  const submit = useSubmit();
+  const shopify = useAppBridge();
+
+  const [draft, setDraft] = useState<TierListSettings>(initial);
+  const update = <K extends keyof TierListSettings>(key: K, value: TierListSettings[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const pending = navigation.state !== "idle" && navigation.formData?.get("widgetKey") === "tierList";
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(initial);
+
+  useEffect(() => {
+    if (!actionData || pending) return;
+    if (actionData.error) shopify.toast.show(actionData.error, { isError: true });
+    else if (actionData.notice) shopify.toast.show(actionData.notice, { duration: 2400 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionData]);
+
+  return (
+    <s-section heading="Tier list popup">
+      <s-stack direction="block" gap="base">
+        <s-paragraph>
+          A click-to-open popup listing every tier of your active volume/quantity discount, with the shopper&apos;s
+          current tier highlighted.
+        </s-paragraph>
+
+        <AddToStoreCallout modalId="tier-list-snippet-modal" />
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Content</s-text>
+
+            <s-text-field label="Trigger label" value={draft.triggerLabel} onInput={(event: ControlEvent) => update("triggerLabel", readValue(event))} />
+
+            <s-text-field label="Popup heading" value={draft.heading} onInput={(event: ControlEvent) => update("heading", readValue(event))} />
+
+            <s-text-field
+              label="Row template"
+              details="Repeated once per tier. Tokens: {quantity} (that tier's threshold), {discount} (its %/amount)."
+              value={draft.rowTemplate}
+              onInput={(event: ControlEvent) => update("rowTemplate", readValue(event))}
+            />
+          </s-stack>
+        </s-box>
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Style</s-text>
+
+            <s-grid gridTemplateColumns="repeat(2, minmax(160px, 1fr))" gap="base">
+              <s-color-field
+                label="Background color"
+                value={draft.backgroundColor}
+                onInput={(event: ControlEvent) => update("backgroundColor", readValue(event))}
+              />
+              <s-color-field label="Text color" value={draft.textColor} onInput={(event: ControlEvent) => update("textColor", readValue(event))} />
+              <s-color-field
+                label="Current-tier accent color"
+                value={draft.accentColor}
+                onInput={(event: ControlEvent) => update("accentColor", readValue(event))}
+              />
+            </s-grid>
+
+            <PixelPair
+              label="Font size"
+              mobileLabel="Mobile font size"
+              value={draft.fontSize}
+              mobileValue={draft.mobileFontSize}
+              max={48}
+              onChange={(v) => update("fontSize", v)}
+              onMobileChange={(v) => update("mobileFontSize", v)}
+            />
+
+            <PixelPair
+              label="Top padding"
+              mobileLabel="Mobile top padding"
+              value={draft.paddingTop}
+              mobileValue={draft.mobilePaddingTop}
+              max={200}
+              onChange={(v) => update("paddingTop", v)}
+              onMobileChange={(v) => update("mobilePaddingTop", v)}
+            />
+
+            <PixelPair
+              label="Bottom padding"
+              mobileLabel="Mobile bottom padding"
+              value={draft.paddingBottom}
+              mobileValue={draft.mobilePaddingBottom}
+              max={200}
+              onChange={(v) => update("paddingBottom", v)}
+              onMobileChange={(v) => update("mobilePaddingBottom", v)}
+            />
+
+            <PixelPair
+              label="Left padding"
+              mobileLabel="Mobile left padding"
+              value={draft.paddingLeft}
+              mobileValue={draft.mobilePaddingLeft}
+              max={200}
+              onChange={(v) => update("paddingLeft", v)}
+              onMobileChange={(v) => update("mobilePaddingLeft", v)}
+            />
+
+            <PixelPair
+              label="Right padding"
+              mobileLabel="Mobile right padding"
+              value={draft.paddingRight}
+              mobileValue={draft.mobilePaddingRight}
+              max={200}
+              onChange={(v) => update("paddingRight", v)}
+              onMobileChange={(v) => update("mobilePaddingRight", v)}
+            />
+          </s-stack>
+        </s-box>
+
+        <s-stack direction="inline" justifyContent="end">
+          <s-button
+            variant="primary"
+            loading={pending}
+            disabled={pending || !isDirty}
+            onClick={() => {
+              const data = new FormData();
+              data.set("widgetKey", "tierList");
+              for (const [key, value] of Object.entries(draft)) data.set(key, String(value));
+              submit(data, { method: "post" });
+            }}
+          >
+            Save
+          </s-button>
+        </s-stack>
+      </s-stack>
+
+      <SnippetModal
+        id="tier-list-snippet-modal"
+        heading="Tier list popup — snippet code"
+        loaderFile="tier-list.js"
+        placements={[
+          {
+            tag: "winslet-tier-list",
+            title: "Paste wherever you want the trigger to show",
+            description: "Product page, cart page, anywhere — paste it as many times as you like.",
+          },
+        ]}
+      />
+    </s-section>
+  );
+}
+
+type WidgetKey = "freeShippingBar" | "bogoGift" | "announcementBar" | "orderDiscountBar" | "tierProgressBar" | "tierList";
 
 function WidgetCard({
   icon,
@@ -1114,7 +1473,7 @@ function WidgetCard({
   onClick,
   disabled,
 }: {
-  icon: "cart-discount" | "gift-card" | "megaphone" | "discount";
+  icon: "cart-discount" | "gift-card" | "megaphone" | "discount" | "chart-stacked" | "price-list";
   iconBackground: string;
   title: string;
   description: string;
@@ -1157,7 +1516,7 @@ function WidgetCard({
 }
 
 export default function StorefrontWidgets() {
-  const { freeShippingBar, bogoGift, announcementBar, orderDiscountBar } = useLoaderData<typeof loader>();
+  const { freeShippingBar, bogoGift, announcementBar, orderDiscountBar, tierProgressBar, tierList } = useLoaderData<typeof loader>();
   const [selected, setSelected] = useState<WidgetKey | null>(null);
 
   if (selected === "freeShippingBar") {
@@ -1204,6 +1563,28 @@ export default function StorefrontWidgets() {
     );
   }
 
+  if (selected === "tierProgressBar") {
+    return (
+      <s-page heading="Storefront" inlineSize="small">
+        <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
+          Storefront
+        </s-button>
+        <TierProgressBarSection initial={tierProgressBar} />
+      </s-page>
+    );
+  }
+
+  if (selected === "tierList") {
+    return (
+      <s-page heading="Storefront" inlineSize="small">
+        <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
+          Storefront
+        </s-button>
+        <TierListSection initial={tierList} />
+      </s-page>
+    );
+  }
+
   return (
     <s-page heading="Storefront" inlineSize="small">
       <s-section heading="Widgets">
@@ -1238,6 +1619,20 @@ export default function StorefrontWidgets() {
               title="Order discount bar"
               description="Live progress toward your order-wide percent/amount discount."
               onClick={() => setSelected("orderDiscountBar")}
+            />
+            <WidgetCard
+              icon="chart-stacked"
+              iconBackground="#e8ddf7"
+              title="Tier progress bar"
+              description="One bar with a tick mark for every volume-discount breakpoint."
+              onClick={() => setSelected("tierProgressBar")}
+            />
+            <WidgetCard
+              icon="price-list"
+              iconBackground="#fde8ee"
+              title="Tier list popup"
+              description="A click-to-open list of every volume-discount tier."
+              onClick={() => setSelected("tierList")}
             />
           </s-grid>
         </s-stack>

@@ -161,11 +161,62 @@ export interface AnnouncementBarSettings {
   mobilePaddingRight: number;
 }
 
+/**
+ * A single progress bar toward the shopper's NEXT unmet volume/
+ * quantity tier (see storefront-widgets.server.ts's
+ * getActiveTieredDiscount) — small tick marks along the track show
+ * where each tier sits, unlike the single-threshold bars above. No
+ * per-tier text is stored here; messageTemplate/completeMessage are
+ * reused across however many tiers the active campaign has, via
+ * {remaining} and {discount} tokens resolved against whichever tier
+ * is currently next/current.
+ */
+export interface TierProgressBarSettings extends BarSizingSettings {
+  trackColor: string;
+  progressColor: string;
+  reachedColor: string;
+  // Shown while below the highest tier. Tokens: {remaining} (bare
+  // number to the next tier), {currency_symbol}, {currency_code},
+  // {discount} (the NEXT tier's %/amount, e.g. "15%" or "$10").
+  messageTemplate: string;
+  // Shown once the highest tier is met. Token: {discount} (the
+  // highest tier's own %/amount).
+  completeMessage: string;
+}
+
+/**
+ * A click-to-open popup listing every tier of the active volume/
+ * quantity discount ("Buy 2+, save 10% · Buy 4+, save 20%") — one
+ * rowTemplate reused per tier via {quantity} (that tier's minValue)
+ * and {discount} tokens, with the shopper's current tier highlighted
+ * in accentColor.
+ */
+export interface TierListSettings {
+  heading: string;
+  triggerLabel: string;
+  rowTemplate: string;
+  backgroundColor: string;
+  textColor: string;
+  accentColor: string;
+  fontSize: number;
+  mobileFontSize: number;
+  paddingTop: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  paddingRight: number;
+  mobilePaddingTop: number;
+  mobilePaddingBottom: number;
+  mobilePaddingLeft: number;
+  mobilePaddingRight: number;
+}
+
 export interface WidgetSettings {
   freeShippingBar: FreeShippingBarSettings;
   bogoGift: BogoGiftSettings;
   announcementBar: AnnouncementBarSettings;
   orderDiscountBar: OrderDiscountBarSettings;
+  tierProgressBar: TierProgressBarSettings;
+  tierList: TierListSettings;
 }
 
 const DEFAULT_BAR_SIZING: BarSizingSettings = {
@@ -242,6 +293,34 @@ const DEFAULT_ANNOUNCEMENT_BAR: AnnouncementBarSettings = {
   mobilePaddingRight: 12,
 };
 
+const DEFAULT_TIER_PROGRESS_BAR: TierProgressBarSettings = {
+  ...DEFAULT_BAR_SIZING,
+  trackColor: "#f1f2f3",
+  progressColor: "#8c9196",
+  reachedColor: "#008060",
+  messageTemplate: "Add {remaining} more for {discount} off!",
+  completeMessage: "You've unlocked {discount} off — our best discount!",
+};
+
+const DEFAULT_TIER_LIST: TierListSettings = {
+  heading: "Bulk discounts",
+  triggerLabel: "See bulk pricing",
+  rowTemplate: "Buy {quantity}+, save {discount}",
+  backgroundColor: "#ffffff",
+  textColor: "#1a1a1a",
+  accentColor: "#008060",
+  fontSize: 14,
+  mobileFontSize: 13,
+  paddingTop: 16,
+  paddingBottom: 16,
+  paddingLeft: 16,
+  paddingRight: 16,
+  mobilePaddingTop: 12,
+  mobilePaddingBottom: 12,
+  mobilePaddingLeft: 12,
+  mobilePaddingRight: 12,
+};
+
 const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
 
 function normalizeHexColor(raw: unknown, fallback: string): string {
@@ -301,6 +380,8 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
   const giftRecord = recordOf(record.bogoGift);
   const announcementRecord = recordOf(record.announcementBar);
   const orderBarRecord = recordOf(record.orderDiscountBar);
+  const tierBarRecord = recordOf(record.tierProgressBar);
+  const tierListRecord = recordOf(record.tierList);
 
   const nearThresholdPercent =
     typeof barRecord.nearThresholdPercent === "number" && Number.isFinite(barRecord.nearThresholdPercent)
@@ -374,6 +455,32 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
         DEFAULT_ANNOUNCEMENT_BAR.mobilePaddingRight,
         200,
       ),
+    },
+    tierProgressBar: {
+      ...normalizeBarSizing(tierBarRecord, DEFAULT_TIER_PROGRESS_BAR),
+      trackColor: normalizeHexColor(tierBarRecord.trackColor, DEFAULT_TIER_PROGRESS_BAR.trackColor),
+      progressColor: normalizeHexColor(tierBarRecord.progressColor, DEFAULT_TIER_PROGRESS_BAR.progressColor),
+      reachedColor: normalizeHexColor(tierBarRecord.reachedColor, DEFAULT_TIER_PROGRESS_BAR.reachedColor),
+      messageTemplate: normalizeMessage(tierBarRecord.messageTemplate, DEFAULT_TIER_PROGRESS_BAR.messageTemplate),
+      completeMessage: normalizeMessage(tierBarRecord.completeMessage, DEFAULT_TIER_PROGRESS_BAR.completeMessage),
+    },
+    tierList: {
+      heading: normalizeMessage(tierListRecord.heading, DEFAULT_TIER_LIST.heading),
+      triggerLabel: normalizeMessage(tierListRecord.triggerLabel, DEFAULT_TIER_LIST.triggerLabel),
+      rowTemplate: normalizeMessage(tierListRecord.rowTemplate, DEFAULT_TIER_LIST.rowTemplate),
+      backgroundColor: normalizeHexColor(tierListRecord.backgroundColor, DEFAULT_TIER_LIST.backgroundColor),
+      textColor: normalizeHexColor(tierListRecord.textColor, DEFAULT_TIER_LIST.textColor),
+      accentColor: normalizeHexColor(tierListRecord.accentColor, DEFAULT_TIER_LIST.accentColor),
+      fontSize: normalizePixels(tierListRecord.fontSize, DEFAULT_TIER_LIST.fontSize, 48),
+      mobileFontSize: normalizePixels(tierListRecord.mobileFontSize, DEFAULT_TIER_LIST.mobileFontSize, 48),
+      paddingTop: normalizePixels(tierListRecord.paddingTop, DEFAULT_TIER_LIST.paddingTop, 200),
+      paddingBottom: normalizePixels(tierListRecord.paddingBottom, DEFAULT_TIER_LIST.paddingBottom, 200),
+      paddingLeft: normalizePixels(tierListRecord.paddingLeft, DEFAULT_TIER_LIST.paddingLeft, 200),
+      paddingRight: normalizePixels(tierListRecord.paddingRight, DEFAULT_TIER_LIST.paddingRight, 200),
+      mobilePaddingTop: normalizePixels(tierListRecord.mobilePaddingTop, DEFAULT_TIER_LIST.mobilePaddingTop, 200),
+      mobilePaddingBottom: normalizePixels(tierListRecord.mobilePaddingBottom, DEFAULT_TIER_LIST.mobilePaddingBottom, 200),
+      mobilePaddingLeft: normalizePixels(tierListRecord.mobilePaddingLeft, DEFAULT_TIER_LIST.mobilePaddingLeft, 200),
+      mobilePaddingRight: normalizePixels(tierListRecord.mobilePaddingRight, DEFAULT_TIER_LIST.mobilePaddingRight, 200),
     },
   };
 }
