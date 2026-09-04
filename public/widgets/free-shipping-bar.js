@@ -1,10 +1,19 @@
 /**
- * Winslet free-shipping progress bar — a global app embed (see the
- * matching .liquid file's schema, target: "body"). Unlike the earlier
- * settings-driven block this replaces, everything it needs (the real
- * campaign threshold, and the merchant's chosen colors/messages) comes
- * live from the App Proxy at connect time — nothing is hand-typed into
- * the theme, so it can never drift out of sync with the real discount.
+ * Winslet free-shipping progress bar. Hosted from this app's own
+ * server (not a theme-extension asset) so it can be pasted into ANY
+ * theme file at ANY spot — the cart drawer, the cart page, above the
+ * footer — instead of being confined to wherever a "target: body" app
+ * embed happens to land in the page's DOM (which turned out to be
+ * right before </body>, i.e. off-screen unless force-positioned, and
+ * force-positioning it — position:fixed at the top — collided with
+ * themes whose own header is also fixed/sticky). Renders inline,
+ * wherever its <winslet-free-shipping-bar> tag is placed — no special
+ * positioning of its own, so it can never fight with a theme's header.
+ *
+ * Everything it needs (the real campaign threshold, the merchant's
+ * chosen colors/messages) comes live from the App Proxy at connect
+ * time — nothing is hand-typed into the theme, so it can never drift
+ * out of sync with the real discount.
  *
  * Cart-change reactivity uses three independent signals, since theme
  * cart-update conventions vary and no single one is universal:
@@ -43,19 +52,16 @@
       this.style.display = "none";
 
       this.innerHTML =
-        '<div class="winslet-fsb__track" style="background:#e3e3e3;border-radius:999px;height:8px;overflow:hidden;">' +
-        '<div class="winslet-fsb__fill" style="height:100%;border-radius:999px;width:0%;transition:width 0.3s ease,background-color 0.3s ease;"></div>' +
+        '<div class="winslet-fsb__track" style="border-radius:999px;height:8px;overflow:hidden;">' +
+        '<div class="winslet-fsb__fill" style="height:100%;border-radius:999px;width:0%;' +
+        "box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);transition:width 0.3s ease,background-color 0.3s ease;" +
+        '"></div>' +
         "</div>" +
         '<p class="winslet-fsb__message" style="margin:8px 0 0;font-size:14px;text-align:center;"></p>';
+      this.trackEl = this.querySelector(".winslet-fsb__track");
       this.fillEl = this.querySelector(".winslet-fsb__fill");
       this.messageEl = this.querySelector(".winslet-fsb__message");
-
-      // A target:"body" app embed is injected right before </body>, at
-      // the very bottom of the page's HTML — position:sticky would only
-      // engage once scrolled all the way down to where it naturally
-      // sits. position:fixed pins it to the top of the viewport
-      // immediately, regardless of where in the DOM it landed.
-      this.style.cssText += "position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px 16px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.1);";
+      this.style.cssText += "display:none;padding:8px 16px;";
 
       this.loadConfig();
       this.configInterval = setInterval(() => this.loadConfig(), CONFIG_REFRESH_MS);
@@ -105,6 +111,7 @@
             this.style.display = "none";
             return;
           }
+          this.trackEl.style.backgroundColor = config.trackColor;
           this.style.display = "block";
           this.refreshCart();
         })

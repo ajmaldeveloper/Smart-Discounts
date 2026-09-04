@@ -5,6 +5,7 @@ describe("normalizeWidgetSettings", () => {
   it("normalizes a full valid config", () => {
     const settings = normalizeWidgetSettings({
       freeShippingBar: {
+        trackColor: "#000000",
         startColor: "#111111",
         nearColor: "#222222",
         reachedColor: "#333333",
@@ -15,6 +16,7 @@ describe("normalizeWidgetSettings", () => {
     });
 
     expect(settings.freeShippingBar).toEqual({
+      trackColor: "#000000",
       startColor: "#111111",
       nearColor: "#222222",
       reachedColor: "#333333",
@@ -33,7 +35,8 @@ describe("normalizeWidgetSettings", () => {
       },
     });
 
-    expect(settings.freeShippingBar.startColor).toBe("#e1e3e5");
+    expect(settings.freeShippingBar.trackColor).toBe("#f1f2f3");
+    expect(settings.freeShippingBar.startColor).toBe("#8c9196");
     expect(settings.freeShippingBar.nearColor).toBe("#ffc453");
     expect(settings.freeShippingBar.reachedColor).toBe("#008060");
     expect(settings.freeShippingBar.nearThresholdPercent).toBe(100);
@@ -47,10 +50,10 @@ describe("normalizeWidgetSettings", () => {
   });
 
   it("returns all defaults for null, undefined, or a non-object", () => {
-    expect(normalizeWidgetSettings(null).freeShippingBar.startColor).toBe("#e1e3e5");
-    expect(normalizeWidgetSettings(undefined).freeShippingBar.startColor).toBe("#e1e3e5");
-    expect(normalizeWidgetSettings("garbage").freeShippingBar.startColor).toBe("#e1e3e5");
-    expect(normalizeWidgetSettings({}).freeShippingBar.startColor).toBe("#e1e3e5");
+    expect(normalizeWidgetSettings(null).freeShippingBar.startColor).toBe("#8c9196");
+    expect(normalizeWidgetSettings(undefined).freeShippingBar.startColor).toBe("#8c9196");
+    expect(normalizeWidgetSettings("garbage").freeShippingBar.startColor).toBe("#8c9196");
+    expect(normalizeWidgetSettings({}).freeShippingBar.startColor).toBe("#8c9196");
   });
 
   it("accepts a short 3-digit hex color", () => {

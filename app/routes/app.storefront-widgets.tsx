@@ -15,7 +15,22 @@ function readValue(event: ControlEvent): string {
   return String(target?.value ?? "");
 }
 
+type OverlayElement = HTMLElement & { hideOverlay?: () => void };
+function hideOverlay(id: string) {
+  (document.getElementById(id) as OverlayElement | null)?.hideOverlay?.();
+}
+
 const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
+
+// Hosted from our own app (not the theme extension's asset pipeline)
+// so it can be pasted into ANY theme file — the cart drawer, above the
+// footer, wherever a merchant wants it — instead of being confined to
+// wherever a "target: body" app embed happens to land in the DOM.
+const SNIPPET_SCRIPT_URL = "https://winslet-smart-discounts.fly.dev/widgets/free-shipping-bar.js";
+
+function buildSnippet(): string {
+  return `<script src="${SNIPPET_SCRIPT_URL}" defer></script>\n<winslet-free-shipping-bar data-proxy-root="/apps/winslet" data-currency="{{ cart.currency.iso_code }}"></winslet-free-shipping-bar>`;
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -23,13 +38,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shop = await db.shop.findUnique({ where: { domain: session.shop } });
   const { freeShippingBar } = normalizeWidgetSettings(shop?.widgetSettingsJson);
 
-  return { freeShippingBar, shopDomain: session.shop };
+  return { freeShippingBar };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
   const formData = await request.formData();
+  const trackColor = String(formData.get("trackColor") ?? "").trim();
   const startColor = String(formData.get("startColor") ?? "").trim();
   const nearColor = String(formData.get("nearColor") ?? "").trim();
   const reachedColor = String(formData.get("reachedColor") ?? "").trim();
@@ -38,6 +54,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const completeMessage = String(formData.get("completeMessage") ?? "").trim();
 
   for (const [label, value] of [
+    ["Background", trackColor],
     ["Starting", startColor],
     ["Nearly-reached", nearColor],
     ["Reached", reachedColor],
@@ -54,6 +71,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!completeMessage) return { error: "Enter a complete message." } satisfies ActionData;
 
   const freeShippingBar: FreeShippingBarSettings = {
+    trackColor,
     startColor,
     nearColor,
     reachedColor,
@@ -71,12 +89,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function StorefrontWidgets() {
-  const { freeShippingBar, shopDomain } = useLoaderData<typeof loader>();
+  const { freeShippingBar } = useLoaderData<typeof loader>();
   const actionData = useActionData() as ActionData | undefined;
   const navigation = useNavigation();
   const submit = useSubmit();
   const shopify = useAppBridge();
 
+  const [trackColor, setTrackColor] = useState(freeShippingBar.trackColor);
   const [startColor, setStartColor] = useState(freeShippingBar.startColor);
   const [nearColor, setNearColor] = useState(freeShippingBar.nearColor);
   const [reachedColor, setReachedColor] = useState(freeShippingBar.reachedColor);
@@ -92,6 +111,7 @@ export default function StorefrontWidgets() {
 
   const isSaving = navigation.state !== "idle";
   const isDirty =
+    trackColor !== freeShippingBar.trackColor ||
     startColor !== freeShippingBar.startColor ||
     nearColor !== freeShippingBar.nearColor ||
     reachedColor !== freeShippingBar.reachedColor ||
@@ -99,19 +119,34 @@ export default function StorefrontWidgets() {
     progressMessage !== freeShippingBar.progressMessage ||
     completeMessage !== freeShippingBar.completeMessage;
 
+  const copySnippet = async () => {
+    try {
+      await navigator.clipboard.writeText(buildSnippet());
+      shopify.toast.show("Snippet copied.", { duration: 2000 });
+    } catch {
+      shopify.toast.show("Couldn't copy — select and copy the code manually.", { isError: true });
+    }
+  };
+
   return (
     <s-page heading="Storefront" inlineSize="small">
       <s-section heading="Free shipping bar">
         <s-stack direction="block" gap="base">
           <s-paragraph>
             Shows live progress toward whichever active campaign has a free-shipping minimum — no need to re-enter
-            the threshold here, it always matches the real discount. Turn it on once in your theme, then style it
-            below.
+            the threshold here, it always matches the real discount. Paste the snippet below wherever you want it to
+            show (cart drawer, cart page, above the footer — your theme&apos;s code editor, your placement), then
+            style it here.
           </s-paragraph>
 
           <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
             <s-stack direction="block" gap="base">
-              <s-grid gridTemplateColumns="repeat(3, minmax(140px, 1fr))" gap="base">
+              <s-grid gridTemplateColumns="repeat(4, minmax(120px, 1fr))" gap="base">
+                <s-color-field
+                  label="Background color"
+                  value={trackColor}
+                  onInput={(event: ControlEvent) => setTrackColor(readValue(event))}
+                />
                 <s-color-field
                   label="Starting color"
                   value={startColor}
@@ -155,15 +190,15 @@ export default function StorefrontWidgets() {
           </s-box>
 
           <s-box background="subdued" borderWidth="base" borderColor="subdued" borderRadius="base" padding="small">
-            <s-stack direction="inline" gap="small-200" alignItems="center">
-              <s-icon type="info" tone="neutral" />
-              <s-text color="subdued">Add the bar to your store once in Theme Editor → App embeds.</s-text>
-              <s-button
-                variant="secondary"
-                href={`https://${shopDomain}/admin/themes/current/editor?context=apps`}
-                target="_blank"
-              >
-                Open theme editor
+            <s-stack direction="inline" gap="small-200" alignItems="center" justifyContent="space-between">
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <s-icon type="info" tone="neutral" />
+                <s-text color="subdued">
+                  Paste this once into your theme&apos;s code (e.g. the cart drawer snippet) wherever you want it to appear.
+                </s-text>
+              </s-stack>
+              <s-button variant="secondary" commandFor="storefront-widget-snippet-modal" command="--show">
+                Copy snippet code
               </s-button>
             </s-stack>
           </s-box>
@@ -175,6 +210,7 @@ export default function StorefrontWidgets() {
               disabled={isSaving || !isDirty}
               onClick={() => {
                 const data = new FormData();
+                data.set("trackColor", trackColor);
                 data.set("startColor", startColor);
                 data.set("nearColor", nearColor);
                 data.set("reachedColor", reachedColor);
@@ -189,6 +225,30 @@ export default function StorefrontWidgets() {
           </s-stack>
         </s-stack>
       </s-section>
+
+      <s-modal id="storefront-widget-snippet-modal" heading="Free shipping bar — snippet code">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            Paste this into your theme&apos;s code editor at the exact spot you want the bar to show — for example inside
+            your cart drawer&apos;s snippet file, right below the cart heading.
+          </s-paragraph>
+          <s-text-area label="Snippet" value={buildSnippet()} readOnly rows={3} />
+        </s-stack>
+
+        <s-button slot="secondary-actions" commandFor="storefront-widget-snippet-modal" command="--hide">
+          Close
+        </s-button>
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          onClick={() => {
+            copySnippet();
+            hideOverlay("storefront-widget-snippet-modal");
+          }}
+        >
+          Copy code
+        </s-button>
+      </s-modal>
     </s-page>
   );
 }

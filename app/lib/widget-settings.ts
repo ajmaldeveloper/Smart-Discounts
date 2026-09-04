@@ -14,6 +14,10 @@ export interface FreeShippingBarSettings {
   // Hex color strings (e.g. "#008060") — never anything else, so the
   // storefront script can set them directly as a CSS custom property
   // without its own validation.
+  // The bar's own empty track — kept independently configurable since
+  // a startColor too close to the default track color made the bar
+  // look broken/invisible at low progress (merchant-reported).
+  trackColor: string;
   startColor: string;
   nearColor: string;
   reachedColor: string;
@@ -36,7 +40,8 @@ export interface WidgetSettings {
 }
 
 const DEFAULT_FREE_SHIPPING_BAR: FreeShippingBarSettings = {
-  startColor: "#e1e3e5",
+  trackColor: "#f1f2f3",
+  startColor: "#8c9196",
   nearColor: "#ffc453",
   reachedColor: "#008060",
   nearThresholdPercent: 75,
@@ -69,6 +74,7 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
 
   return {
     freeShippingBar: {
+      trackColor: normalizeHexColor(barRecord.trackColor, DEFAULT_FREE_SHIPPING_BAR.trackColor),
       startColor: normalizeHexColor(barRecord.startColor, DEFAULT_FREE_SHIPPING_BAR.startColor),
       nearColor: normalizeHexColor(barRecord.nearColor, DEFAULT_FREE_SHIPPING_BAR.nearColor),
       reachedColor: normalizeHexColor(barRecord.reachedColor, DEFAULT_FREE_SHIPPING_BAR.reachedColor),
