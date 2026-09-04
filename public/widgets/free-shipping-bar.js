@@ -64,6 +64,11 @@
   // open. With it, a freshly (re)connected instance renders instantly
   // from whatever the page already knows, then quietly revalidates.
   var sharedConfig = null;
+  // The last successfully fetched /cart.js payload, shared the same
+  // way — lets a morph-triggered rebuild (see watchForMorph) repaint
+  // synchronously from known data instead of a blank 0%-width frame
+  // while a fresh fetch is in flight.
+  var sharedCart = null;
 
   function ensureSharedStyle() {
     if (document.getElementById(STYLE_ELEMENT_ID)) return;
@@ -124,13 +129,14 @@
       this.config = null;
 
       ensureSharedStyle();
-      this.buildMarkup();
+      this.buildMarkup(true);
       this.watchForMorph();
 
       if (sharedConfig) {
         // Already known from an earlier instance on this page — show
         // it immediately, no fetch-and-wait, then revalidate quietly.
         this.applyConfig(sharedConfig);
+        if (sharedCart) this.render(sharedCart);
         this.refreshCart();
       }
       this.loadConfig();
@@ -153,10 +159,22 @@
       if (this.morphObserver) this.morphObserver.disconnect();
     }
 
-    /** (Re)builds the internal track/fill/message DOM — safe to call repeatedly, e.g. after a theme morph strips it. */
-    buildMarkup() {
-      this.style.display = "none";
-      this.style.cssText += "display:none;padding:8px 16px;";
+    /**
+     * (Re)builds the internal track/fill/message DOM — safe to call
+     * repeatedly, e.g. after a theme morph strips it. `hide` controls
+     * whether it resets to display:none first: true only for the very
+     * first build, when nothing is known yet. A morph-triggered rebuild
+     * passes false and instead re-applies the last known config/cart
+     * synchronously right after, in the same tick — since nothing here
+     * yields to the event loop, the browser paints only the final
+     * result, never an intermediate hidden or 0%-width frame. Some
+     * themes morph their ENTIRE cart drawer on every single change
+     * (not just occasionally), so this path runs constantly — a
+     * visible hide-then-show or restart-from-zero on every cart update
+     * would be far more noticeable than the rare case it was built for.
+     */
+    buildMarkup(hide) {
+      if (hide) this.style.cssText += "display:none;padding:8px 16px;";
       this.innerHTML =
         '<div class="winslet-fsb__track"><div class="winslet-fsb__fill"></div></div>' + '<p class="winslet-fsb__message"></p>';
       this.trackEl = this.querySelector(".winslet-fsb__track");
@@ -171,17 +189,19 @@
      * everything buildMarkup() created without connectedCallback firing
      * again (the top-level node is preserved, only its contents are
      * reconciled away). Watching for exactly that and rebuilding
-     * immediately is far more reliable than hoping a cart event fires
-     * again soon.
+     * immediately — synchronously, from cache — is far more reliable
+     * than hoping a cart event fires again soon, and avoids any visible
+     * flash since nothing here waits on a fetch.
      */
     watchForMorph() {
       this.morphObserver = new MutationObserver(() => {
         if (!this.trackEl || !this.contains(this.trackEl)) {
-          this.buildMarkup();
+          this.buildMarkup(false);
           if (this.config) {
             this.applyConfig(this.config);
-            this.refreshCart();
+            if (sharedCart) this.render(sharedCart);
           }
+          this.refreshCart();
         }
       });
       this.morphObserver.observe(this, { childList: true });
@@ -241,7 +261,10 @@
     refreshCart() {
       fetch("/cart.js", { headers: { accept: "application/json" } })
         .then((response) => response.json())
-        .then((cart) => this.render(cart))
+        .then((cart) => {
+          sharedCart = cart;
+          this.render(cart);
+        })
         .catch(() => {
           /* Network hiccup — the bar just keeps its last known state. */
         });
