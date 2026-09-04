@@ -75,12 +75,14 @@
     var style = document.createElement("style");
     style.id = STYLE_ELEMENT_ID;
     style.textContent =
+      "winslet-free-shipping-bar{padding:var(--winslet-fsb-padding-top) var(--winslet-fsb-padding-right) var(--winslet-fsb-padding-bottom) var(--winslet-fsb-padding-left);}" +
       "winslet-free-shipping-bar .winslet-fsb__track{height:var(--winslet-fsb-thickness);border-radius:var(--winslet-fsb-roundness);overflow:hidden;}" +
       "winslet-free-shipping-bar .winslet-fsb__fill{height:100%;width:0%;border-radius:var(--winslet-fsb-roundness);box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);transition:width 0.3s ease,background-color 0.3s ease;}" +
       "winslet-free-shipping-bar .winslet-fsb__message{margin:var(--winslet-fsb-gap) 0 0;font-size:var(--winslet-fsb-font-size);text-align:center;}" +
       "@media (max-width:" +
       MOBILE_BREAKPOINT +
       "px){" +
+      "winslet-free-shipping-bar{padding:var(--winslet-fsb-mobile-padding-top) var(--winslet-fsb-mobile-padding-right) var(--winslet-fsb-mobile-padding-bottom) var(--winslet-fsb-mobile-padding-left);}" +
       "winslet-free-shipping-bar .winslet-fsb__track{height:var(--winslet-fsb-mobile-thickness);border-radius:var(--winslet-fsb-mobile-roundness);}" +
       "winslet-free-shipping-bar .winslet-fsb__fill{border-radius:var(--winslet-fsb-mobile-roundness);}" +
       "winslet-free-shipping-bar .winslet-fsb__message{margin-top:var(--winslet-fsb-mobile-gap);font-size:var(--winslet-fsb-mobile-font-size);}" +
@@ -174,7 +176,7 @@
      * would be far more noticeable than the rare case it was built for.
      */
     buildMarkup(hide) {
-      if (hide) this.style.cssText += "display:none;padding:8px 16px;";
+      if (hide) this.style.display = "none";
       this.innerHTML =
         '<div class="winslet-fsb__track"><div class="winslet-fsb__fill"></div></div>' + '<p class="winslet-fsb__message"></p>';
       this.trackEl = this.querySelector(".winslet-fsb__track");
@@ -266,6 +268,14 @@
       this.style.setProperty("--winslet-fsb-mobile-font-size", config.mobileMessageFontSize + "px");
       this.style.setProperty("--winslet-fsb-gap", config.barMessageGap + "px");
       this.style.setProperty("--winslet-fsb-mobile-gap", config.mobileBarMessageGap + "px");
+      this.style.setProperty("--winslet-fsb-padding-top", config.paddingTop + "px");
+      this.style.setProperty("--winslet-fsb-padding-bottom", config.paddingBottom + "px");
+      this.style.setProperty("--winslet-fsb-padding-left", config.paddingLeft + "px");
+      this.style.setProperty("--winslet-fsb-padding-right", config.paddingRight + "px");
+      this.style.setProperty("--winslet-fsb-mobile-padding-top", config.mobilePaddingTop + "px");
+      this.style.setProperty("--winslet-fsb-mobile-padding-bottom", config.mobilePaddingBottom + "px");
+      this.style.setProperty("--winslet-fsb-mobile-padding-left", config.mobilePaddingLeft + "px");
+      this.style.setProperty("--winslet-fsb-mobile-padding-right", config.mobilePaddingRight + "px");
       this.style.display = "block";
     }
 

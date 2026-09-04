@@ -20,6 +20,14 @@ describe("normalizeWidgetSettings", () => {
         mobileMessageFontSize: 12,
         barMessageGap: 10,
         mobileBarMessageGap: 6,
+        paddingTop: 4,
+        paddingBottom: 5,
+        paddingLeft: 6,
+        paddingRight: 7,
+        mobilePaddingTop: 1,
+        mobilePaddingBottom: 2,
+        mobilePaddingLeft: 3,
+        mobilePaddingRight: 4,
       },
     });
 
@@ -39,6 +47,14 @@ describe("normalizeWidgetSettings", () => {
       mobileMessageFontSize: 12,
       barMessageGap: 10,
       mobileBarMessageGap: 6,
+      paddingTop: 4,
+      paddingBottom: 5,
+      paddingLeft: 6,
+      paddingRight: 7,
+      mobilePaddingTop: 1,
+      mobilePaddingBottom: 2,
+      mobilePaddingLeft: 3,
+      mobilePaddingRight: 4,
     });
   });
 
@@ -80,6 +96,8 @@ describe("normalizeWidgetSettings", () => {
       expect(freeShippingBar.startColor).toBe("#8c9196");
       expect(freeShippingBar.barThickness).toBe(8);
       expect(freeShippingBar.mobileMessageFontSize).toBe(14);
+      expect(freeShippingBar.paddingTop).toBe(8);
+      expect(freeShippingBar.paddingLeft).toBe(16);
     }
   });
 

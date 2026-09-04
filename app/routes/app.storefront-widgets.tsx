@@ -85,6 +85,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ["mobileMessageFontSize", "Mobile message font size", 48],
     ["barMessageGap", "Bar-to-message gap", 64],
     ["mobileBarMessageGap", "Mobile bar-to-message gap", 64],
+    ["paddingTop", "Top padding", 200],
+    ["paddingBottom", "Bottom padding", 200],
+    ["paddingLeft", "Left padding", 200],
+    ["paddingRight", "Right padding", 200],
+    ["mobilePaddingTop", "Mobile top padding", 200],
+    ["mobilePaddingBottom", "Mobile bottom padding", 200],
+    ["mobilePaddingLeft", "Mobile left padding", 200],
+    ["mobilePaddingRight", "Mobile right padding", 200],
   ] as const;
 
   const pixelValues: Record<string, number> = {};
@@ -112,6 +120,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     mobileMessageFontSize: pixelValues.mobileMessageFontSize,
     barMessageGap: pixelValues.barMessageGap,
     mobileBarMessageGap: pixelValues.mobileBarMessageGap,
+    paddingTop: pixelValues.paddingTop,
+    paddingBottom: pixelValues.paddingBottom,
+    paddingLeft: pixelValues.paddingLeft,
+    paddingRight: pixelValues.paddingRight,
+    mobilePaddingTop: pixelValues.mobilePaddingTop,
+    mobilePaddingBottom: pixelValues.mobilePaddingBottom,
+    mobilePaddingLeft: pixelValues.mobilePaddingLeft,
+    mobilePaddingRight: pixelValues.mobilePaddingRight,
   };
 
   await db.shop.update({
@@ -306,6 +322,46 @@ export default function StorefrontWidgets() {
                 max={64}
                 onChange={(v) => update("barMessageGap", v)}
                 onMobileChange={(v) => update("mobileBarMessageGap", v)}
+              />
+
+              <PixelPair
+                label="Top padding"
+                mobileLabel="Mobile top padding"
+                value={draft.paddingTop}
+                mobileValue={draft.mobilePaddingTop}
+                max={200}
+                onChange={(v) => update("paddingTop", v)}
+                onMobileChange={(v) => update("mobilePaddingTop", v)}
+              />
+
+              <PixelPair
+                label="Bottom padding"
+                mobileLabel="Mobile bottom padding"
+                value={draft.paddingBottom}
+                mobileValue={draft.mobilePaddingBottom}
+                max={200}
+                onChange={(v) => update("paddingBottom", v)}
+                onMobileChange={(v) => update("mobilePaddingBottom", v)}
+              />
+
+              <PixelPair
+                label="Left padding"
+                mobileLabel="Mobile left padding"
+                value={draft.paddingLeft}
+                mobileValue={draft.mobilePaddingLeft}
+                max={200}
+                onChange={(v) => update("paddingLeft", v)}
+                onMobileChange={(v) => update("mobilePaddingLeft", v)}
+              />
+
+              <PixelPair
+                label="Right padding"
+                mobileLabel="Mobile right padding"
+                value={draft.paddingRight}
+                mobileValue={draft.mobilePaddingRight}
+                max={200}
+                onChange={(v) => update("paddingRight", v)}
+                onMobileChange={(v) => update("mobilePaddingRight", v)}
               />
             </s-stack>
           </s-box>

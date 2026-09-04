@@ -57,6 +57,22 @@ export interface FreeShippingBarSettings {
   // Vertical space between the bar and its message, in px.
   barMessageGap: number;
   mobileBarMessageGap: number;
+  // Padding around the whole widget (outside the track+message block),
+  // in px per side — since it's placed inline wherever the merchant
+  // pastes it, this is its only control over breathing room from
+  // surrounding theme content. Applied via applyConfig on every
+  // render (not a one-time inline style), so it survives a theme's
+  // cart-drawer morph the same way every other style field does —
+  // previously hardcoded and set only once in buildMarkup, which a
+  // self-heal rebuild skipped, silently losing it after a cart update.
+  paddingTop: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  paddingRight: number;
+  mobilePaddingTop: number;
+  mobilePaddingBottom: number;
+  mobilePaddingLeft: number;
+  mobilePaddingRight: number;
 }
 
 export interface WidgetSettings {
@@ -79,6 +95,14 @@ const DEFAULT_FREE_SHIPPING_BAR: FreeShippingBarSettings = {
   mobileMessageFontSize: 14,
   barMessageGap: 8,
   mobileBarMessageGap: 8,
+  paddingTop: 8,
+  paddingBottom: 8,
+  paddingLeft: 16,
+  paddingRight: 16,
+  mobilePaddingTop: 8,
+  mobilePaddingBottom: 8,
+  mobilePaddingLeft: 16,
+  mobilePaddingRight: 16,
 };
 
 const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
@@ -125,6 +149,14 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
       mobileMessageFontSize: normalizePixels(barRecord.mobileMessageFontSize, DEFAULT_FREE_SHIPPING_BAR.mobileMessageFontSize, 48),
       barMessageGap: normalizePixels(barRecord.barMessageGap, DEFAULT_FREE_SHIPPING_BAR.barMessageGap, 64),
       mobileBarMessageGap: normalizePixels(barRecord.mobileBarMessageGap, DEFAULT_FREE_SHIPPING_BAR.mobileBarMessageGap, 64),
+      paddingTop: normalizePixels(barRecord.paddingTop, DEFAULT_FREE_SHIPPING_BAR.paddingTop, 200),
+      paddingBottom: normalizePixels(barRecord.paddingBottom, DEFAULT_FREE_SHIPPING_BAR.paddingBottom, 200),
+      paddingLeft: normalizePixels(barRecord.paddingLeft, DEFAULT_FREE_SHIPPING_BAR.paddingLeft, 200),
+      paddingRight: normalizePixels(barRecord.paddingRight, DEFAULT_FREE_SHIPPING_BAR.paddingRight, 200),
+      mobilePaddingTop: normalizePixels(barRecord.mobilePaddingTop, DEFAULT_FREE_SHIPPING_BAR.mobilePaddingTop, 200),
+      mobilePaddingBottom: normalizePixels(barRecord.mobilePaddingBottom, DEFAULT_FREE_SHIPPING_BAR.mobilePaddingBottom, 200),
+      mobilePaddingLeft: normalizePixels(barRecord.mobilePaddingLeft, DEFAULT_FREE_SHIPPING_BAR.mobilePaddingLeft, 200),
+      mobilePaddingRight: normalizePixels(barRecord.mobilePaddingRight, DEFAULT_FREE_SHIPPING_BAR.mobilePaddingRight, 200),
     },
   };
 }
