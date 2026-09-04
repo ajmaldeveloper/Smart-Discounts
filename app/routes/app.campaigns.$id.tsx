@@ -1230,12 +1230,7 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
           <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
             <s-stack direction="block" gap="base">
               <s-text type="strong">Repeat on a schedule</s-text>
-              <s-paragraph>
-                Runs only during a recurring daily/weekly window — e.g. every Friday 6pm-midnight — within the
-                Start/End dates above. Unlike those dates (enforced instantly by Shopify itself), this is checked by
-                our own server roughly once a minute, so there can be up to about a minute of lag right at each
-                on/off transition.
-              </s-paragraph>
+              <s-text color="subdued">Runs only during a recurring window, e.g. every Friday 6pm-midnight.</s-text>
 
               <s-checkbox
                 label="Repeat this campaign"
@@ -1282,15 +1277,7 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
                     <TimeFields label="Active until" value={recurrenceEndTime} onChange={setRecurrenceEndTime} />
                   </s-grid>
 
-                  <s-text color="subdued">
-                    Times are in your current device&apos;s timezone ({timezone}), same as the Start/End dates above.
-                  </s-text>
-
-                  <s-text color="subdued">
-                    While this is on, our scheduler is the source of truth for active/paused — manually pausing will
-                    just be turned back on at the next window. Turn this off, or Expire the campaign, to fully stop
-                    it.
-                  </s-text>
+                  <s-text color="subdued">Times are in your device&apos;s timezone ({timezone}).</s-text>
                 </>
               )}
 
