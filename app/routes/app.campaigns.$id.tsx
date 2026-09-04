@@ -14,6 +14,7 @@ import {
   startExperiment,
   updateCampaignConditions,
   updateCampaignGeneral,
+  updateCampaignRecurrence,
   updateCampaignReward,
   updateCampaignSchedule,
   updateCampaignStacking,
@@ -32,6 +33,7 @@ import {
 } from "../lib/condition-tree-edit";
 import { hasAnyReward, normalizeRewardConfig, type RewardConfig } from "../lib/reward-types";
 import { utcIsoToZonedParts, zonedTimeToUtcIso } from "../lib/timezone";
+import { normalizeRecurrenceRule } from "../lib/recurrence";
 import { displayStatus, statusBadgeTone } from "../lib/campaign-status";
 import { useDeviceTimezone } from "../hooks/useDeviceTimezone";
 import ConditionsEditor from "../components/campaign-builder/ConditionsEditor";
@@ -65,6 +67,17 @@ import {
   requireMarketTargetingAccess,
 } from "../services/entitlements.server";
 import { PlanAccessError } from "../services/plans.server";
+
+const HH_MM_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+const RECURRENCE_WEEKDAY_OPTIONS = [
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+];
 
 const AUDIENCE_GROUP_ID = "managed:audience";
 const PRODUCTS_GROUP_ID = "managed:products";
@@ -210,6 +223,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       experimentId: campaign.experimentId,
       experimentVariant: campaign.experimentVariant,
     },
+    recurrence: normalizeRecurrenceRule(campaign.recurrenceJson),
     experiment: campaign.experimentId
       ? {
           variantAWeight,
@@ -345,6 +359,39 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     }
 
     return { notice: "Schedule saved." } satisfies ActionData;
+  }
+
+  if (actionType === "saveRecurrence") {
+    const enabled = formData.get("recurrenceEnabled") === "true";
+
+    if (!enabled) {
+      await updateCampaignRecurrence(shop.id, id, null);
+      return { notice: "Recurrence turned off — this campaign now runs continuously within its schedule." } satisfies ActionData;
+    }
+
+    const frequency = formData.get("recurrenceFrequency") === "weekly" ? "weekly" : "daily";
+    const daysOfWeek = formData
+      .getAll("recurrenceDaysOfWeek")
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
+    const startTime = String(formData.get("recurrenceStartTime") ?? "").trim();
+    const endTime = String(formData.get("recurrenceEndTime") ?? "").trim();
+
+    if (frequency === "weekly" && daysOfWeek.length === 0) {
+      return { error: "Choose at least one day of the week." } satisfies ActionData;
+    }
+    if (!HH_MM_PATTERN.test(startTime) || !HH_MM_PATTERN.test(endTime)) {
+      return { error: "Choose valid start/end times." } satisfies ActionData;
+    }
+    if (startTime === endTime) {
+      return { error: "Start and end time can't be the same — that window never opens." } satisfies ActionData;
+    }
+
+    const recurrenceTimezone = String(formData.get("recurrenceTimezone") ?? "").trim() || undefined;
+    const updated = await updateCampaignRecurrence(shop.id, id, { frequency, daysOfWeek, startTime, endTime }, recurrenceTimezone);
+    if (!updated) return { error: "Unable to save the recurring schedule." } satisfies ActionData;
+
+    return { notice: "Recurring schedule saved." } satisfies ActionData;
   }
 
   if (actionType === "saveStacking") {
@@ -642,6 +689,7 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
   const {
     campaign,
     experiment,
+    recurrence,
     conditionsTree,
     reward: loadedReward,
     currencyCode,
@@ -715,6 +763,27 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
   const [variantAWeight, setVariantAWeight] = useState(experiment?.variantAWeight ?? 50);
   const isWeightDirty = experiment !== null && variantAWeight !== experiment.variantAWeight;
 
+  const [recurrenceEnabled, setRecurrenceEnabled] = useState(recurrence !== null);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<"daily" | "weekly">(recurrence?.frequency ?? "daily");
+  const [recurrenceDaysOfWeek, setRecurrenceDaysOfWeek] = useState<number[]>(recurrence?.daysOfWeek ?? []);
+  const [recurrenceStartTime, setRecurrenceStartTime] = useState(recurrence?.startTime ?? "09:00");
+  const [recurrenceEndTime, setRecurrenceEndTime] = useState(recurrence?.endTime ?? "17:00");
+  const savedRecurrenceKey = JSON.stringify({
+    enabled: recurrence !== null,
+    frequency: recurrence?.frequency ?? "daily",
+    daysOfWeek: recurrence?.daysOfWeek ?? [],
+    startTime: recurrence?.startTime ?? "09:00",
+    endTime: recurrence?.endTime ?? "17:00",
+  });
+  const draftRecurrenceKey = JSON.stringify({
+    enabled: recurrenceEnabled,
+    frequency: recurrenceFrequency,
+    daysOfWeek: [...recurrenceDaysOfWeek].sort((a, b) => a - b),
+    startTime: recurrenceStartTime,
+    endTime: recurrenceEndTime,
+  });
+  const isRecurrenceDirty = savedRecurrenceKey !== draftRecurrenceKey;
+
   // Lifted here (not into ProductsEditor's own state) because each tab
   // unmounts whenever the merchant switches away from it — a cache
   // kept inside the tab component itself would reset to these
@@ -741,7 +810,7 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
   // now — pushing to Shopify while there's a pending, un-Saved change
   // sitting in a form field would silently drop it (Republish only
   // ever sends what's already been Saved to the database).
-  const hasAnyUnsavedTabEdits = isGeneralDirty || isRewardDirty || isScheduleDirty || isStackingDirty;
+  const hasAnyUnsavedTabEdits = isGeneralDirty || isRewardDirty || isScheduleDirty || isStackingDirty || isWeightDirty || isRecurrenceDirty;
 
   // Mirrors product-options's OptionSetBuilder convention: a redirect
   // carries "?notice=..." for the loader to translate, an in-place
@@ -769,6 +838,7 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
   const isSavingConditions = pendingAction === "saveConditions";
   const isSavingReward = pendingAction === "saveReward";
   const isSavingSchedule = pendingAction === "saveSchedule";
+  const isSavingRecurrence = pendingAction === "saveRecurrence";
   const isSavingStacking = pendingAction === "saveStacking";
   const isPublishing = pendingAction === "publish" || pendingAction === "resume";
   const isPausing = pendingAction === "pause";
@@ -1151,6 +1221,96 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
               Save schedule
             </s-button>
           </s-stack>
+
+          <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+            <s-stack direction="block" gap="base">
+              <s-text type="strong">Repeat on a schedule</s-text>
+              <s-paragraph>
+                Runs only during a recurring daily/weekly window — e.g. every Friday 6pm-midnight — within the
+                Start/End dates above. Unlike those dates (enforced instantly by Shopify itself), this is checked by
+                our own server roughly once a minute, so there can be up to about a minute of lag right at each
+                on/off transition.
+              </s-paragraph>
+
+              <s-checkbox
+                label="Repeat this campaign"
+                checked={recurrenceEnabled}
+                onChange={(event: { target: EventTarget | null }) => {
+                  const target = event.target as { checked?: boolean } | null;
+                  setRecurrenceEnabled(Boolean(target?.checked));
+                }}
+              />
+
+              {recurrenceEnabled && (
+                <>
+                  <s-select
+                    label="Repeats"
+                    value={recurrenceFrequency}
+                    onChange={(event: { target: EventTarget | null; currentTarget: EventTarget | null }) => {
+                      const target = (event.target ?? event.currentTarget) as { value?: string } | null;
+                      setRecurrenceFrequency(target?.value === "weekly" ? "weekly" : "daily");
+                    }}
+                  >
+                    <s-option value="daily">Daily</s-option>
+                    <s-option value="weekly">Weekly</s-option>
+                  </s-select>
+
+                  {recurrenceFrequency === "weekly" && (
+                    <s-choice-list
+                      label="On these days"
+                      multiple
+                      values={recurrenceDaysOfWeek.map(String)}
+                      onChange={(event: { currentTarget: { values?: string[] } }) => {
+                        setRecurrenceDaysOfWeek((event.currentTarget.values ?? []).map(Number));
+                      }}
+                    >
+                      {RECURRENCE_WEEKDAY_OPTIONS.map((day) => (
+                        <s-choice key={day.value} value={String(day.value)}>
+                          {day.label}
+                        </s-choice>
+                      ))}
+                    </s-choice-list>
+                  )}
+
+                  <s-grid gridTemplateColumns="repeat(2, minmax(140px, 1fr))" gap="base" alignItems="end">
+                    <TimeFields label="Active from" value={recurrenceStartTime} onChange={setRecurrenceStartTime} />
+                    <TimeFields label="Active until" value={recurrenceEndTime} onChange={setRecurrenceEndTime} />
+                  </s-grid>
+
+                  <s-text color="subdued">
+                    Times are in your current device&apos;s timezone ({timezone}), same as the Start/End dates above.
+                  </s-text>
+
+                  <s-text color="subdued">
+                    While this is on, our scheduler is the source of truth for active/paused — manually pausing will
+                    just be turned back on at the next window. Turn this off, or Expire the campaign, to fully stop
+                    it.
+                  </s-text>
+                </>
+              )}
+
+              <s-stack direction="inline" justifyContent="end">
+                <s-button
+                  variant="primary"
+                  onClick={() => {
+                    const data = new FormData();
+                    data.set("_action", "saveRecurrence");
+                    data.set("recurrenceEnabled", recurrenceEnabled ? "true" : "false");
+                    data.set("recurrenceFrequency", recurrenceFrequency);
+                    for (const day of recurrenceDaysOfWeek) data.append("recurrenceDaysOfWeek", String(day));
+                    data.set("recurrenceStartTime", recurrenceStartTime);
+                    data.set("recurrenceEndTime", recurrenceEndTime);
+                    data.set("recurrenceTimezone", timezone);
+                    submit(data, { method: "post" });
+                  }}
+                  loading={isSavingRecurrence}
+                  disabled={isSavingRecurrence || !isRecurrenceDirty}
+                >
+                  Save recurring schedule
+                </s-button>
+              </s-stack>
+            </s-stack>
+          </s-box>
         </s-section>
       )}
 

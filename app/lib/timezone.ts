@@ -53,6 +53,21 @@ export function relativeDayLabel(date: Date, timeZone: string): string | null {
   return null;
 }
 
+const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+/** The day-of-week (0 Sunday – 6 Saturday) and minutes-since-midnight `date` reads as in `timeZone` — the two pieces a recurring daily/weekly schedule needs to compare against (see app/lib/recurrence.ts). */
+export function zonedWeekdayAndMinutes(date: Date, timeZone: string): { weekday: number; minutesSinceMidnight: number } {
+  const formatter = new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", weekday: "short", hour: "2-digit", minute: "2-digit" });
+  const result: Record<string, string> = {};
+  for (const part of formatter.formatToParts(date)) {
+    if (part.type !== "literal") result[part.type] = part.value;
+  }
+  return {
+    weekday: WEEKDAY_INDEX[result.weekday] ?? 0,
+    minutesSinceMidnight: Number(result.hour) * 60 + Number(result.minute),
+  };
+}
+
 function partsOf(date: Date, timeZone: string): Record<string, string> {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,

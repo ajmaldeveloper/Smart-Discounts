@@ -284,6 +284,18 @@ model Campaign {
   scheduleEndAt   DateTime?
   timezone        String?
 
+  // A daily/weekly on-off window layered on top of scheduleStartAt/
+  // scheduleEndAt (e.g. "every Friday 6pm-midnight, from Sept 1 to
+  // Dec 31") — see app/lib/recurrence.ts's RecurrenceRule. Unlike
+  // scheduleStartAt/scheduleEndAt (enforced natively by Shopify's own
+  // discount startsAt/endsAt), this has no native Shopify equivalent:
+  // it's enforced by our own polling scheduler (see
+  // app/services/recurring-campaigns.server.ts) pausing/resuming the
+  // campaign roughly once a minute. Null means no recurrence — the
+  // campaign just runs continuously within its start/end dates, same
+  // as before this field existed.
+  recurrenceJson Json?
+
   // REWARD — product/order/shipping discount + tier configuration.
   // Shape defined in M4 (Discount Function Engine) / M7 (Tier Engine) /
   // M8 (Shipping Engine). Required: a campaign with no reward does

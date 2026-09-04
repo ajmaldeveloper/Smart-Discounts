@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import db from "../db.server";
-import { declareExperimentWinner, getExperimentSibling, startExperiment, updateExperimentWeight } from "./campaign.server";
+import {
+  declareExperimentWinner,
+  getExperimentSibling,
+  startExperiment,
+  updateCampaignRecurrence,
+  updateExperimentWeight,
+} from "./campaign.server";
 
 afterEach(async () => {
   await db.shop.deleteMany({ where: { domain: { startsWith: "campaign-model-test-" } } });
@@ -129,5 +135,47 @@ describe("declareExperimentWinner", () => {
     const shop = await makeShop();
     const campaign = await makeCampaign(shop.id);
     expect(await declareExperimentWinner(shop.id, campaign.id)).toBeNull();
+  });
+});
+
+describe("updateCampaignRecurrence", () => {
+  it("saves a valid rule and sets the given timezone", async () => {
+    const shop = await makeShop();
+    const campaign = await makeCampaign(shop.id);
+
+    const updated = await updateCampaignRecurrence(
+      shop.id,
+      campaign.id,
+      { frequency: "weekly", daysOfWeek: [5], startTime: "18:00", endTime: "23:59" },
+      "America/New_York",
+    );
+
+    expect(updated?.recurrenceJson).toEqual({ frequency: "weekly", daysOfWeek: [5], startTime: "18:00", endTime: "23:59" });
+    expect(updated?.timezone).toBe("America/New_York");
+  });
+
+  it("clears the rule when passed null, without touching the timezone", async () => {
+    const shop = await makeShop();
+    const campaign = await makeCampaign(shop.id);
+    await updateCampaignRecurrence(shop.id, campaign.id, { frequency: "daily", startTime: "09:00", endTime: "17:00" }, "UTC");
+
+    const cleared = await updateCampaignRecurrence(shop.id, campaign.id, null);
+
+    expect(cleared?.recurrenceJson).toBeNull();
+    expect(cleared?.timezone).toBe("UTC");
+  });
+
+  it("stores null for a malformed rule rather than throwing", async () => {
+    const shop = await makeShop();
+    const campaign = await makeCampaign(shop.id);
+
+    const updated = await updateCampaignRecurrence(shop.id, campaign.id, { frequency: "monthly" }, "UTC");
+
+    expect(updated?.recurrenceJson).toBeNull();
+  });
+
+  it("returns null for a nonexistent campaign", async () => {
+    const shop = await makeShop();
+    expect(await updateCampaignRecurrence(shop.id, "does-not-exist", null)).toBeNull();
   });
 });

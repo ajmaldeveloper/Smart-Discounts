@@ -7,6 +7,8 @@ import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 // Side-effect only: starts the auto-publish interval once when the server process boots.
 import "./services/scheduled-publish.server";
+// Side-effect only: starts the recurring-campaign sync interval once when the server process boots.
+import "./services/recurring-campaigns.server";
 
 export const streamTimeout = 5000;
 

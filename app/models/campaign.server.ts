@@ -1,8 +1,9 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import crypto from "node:crypto";
 import db from "../db.server";
 import { createEmptyGroup, normalizeConditionNode } from "../lib/campaign-types";
 import { normalizeRewardConfig } from "../lib/reward-types";
+import { normalizeRecurrenceRule } from "../lib/recurrence";
 
 export type CampaignKind = "AUTOMATIC" | "CODE";
 
@@ -221,6 +222,27 @@ export async function updateCampaignSchedule(
   return db.campaign.update({
     where: { id },
     data: { scheduleStartAt: startsAt, scheduleEndAt: endsAt },
+  });
+}
+
+/** `rawRule: null` turns recurrence off entirely (the campaign just runs continuously within scheduleStartAt/scheduleEndAt again); anything else is validated by normalizeRecurrenceRule, degrading to null (off) rather than throwing on malformed input. */
+export async function updateCampaignRecurrence(shopId: string, id: string, rawRule: unknown, timezone?: string) {
+  const campaign = await getCampaign(shopId, id);
+  if (!campaign) return null;
+
+  const rule = rawRule === null ? null : normalizeRecurrenceRule(rawRule);
+
+  return db.campaign.update({
+    where: { id },
+    data: {
+      recurrenceJson: rule === null ? Prisma.JsonNull : (rule as unknown as Prisma.InputJsonValue),
+      // Only set alongside a real rule — recurring times have no
+      // meaning without a timezone to read them in (unlike
+      // scheduleStartAt/scheduleEndAt, which are converted to an
+      // absolute UTC instant at save time and never need to remember
+      // which zone they came from).
+      ...(rule !== null && timezone ? { timezone } : {}),
+    },
   });
 }
 
