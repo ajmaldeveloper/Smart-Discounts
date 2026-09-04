@@ -113,6 +113,13 @@ model Shop {
   // app.campaigns.$id.tsx's hasUnpublishedChanges).
   conflictSettingsUpdatedAt DateTime?
 
+  // Merchant-configured styling/copy for storefront widgets (currently
+  // just the free-shipping progress bar) — read live by the App Proxy
+  // endpoint the theme's app-embed script calls (see
+  // apps.proxy.free-shipping.tsx), so a color change here shows up on
+  // the storefront without republishing any campaign.
+  widgetSettingsJson Json?
+
   installedAt   DateTime  @default(now())
   uninstalledAt DateTime?
   createdAt     DateTime  @default(now())

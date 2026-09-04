@@ -54,6 +54,7 @@ export default function App() {
         <s-link href="/app/campaigns">Campaigns</s-link>
         <s-link href="/app/simulator">Simulator</s-link>
         <s-link href="/app/analytics">Analytics</s-link>
+        <s-link href="/app/storefront-widgets">Storefront</s-link>
         <s-link href="/app/plans">Plans</s-link>
         <s-link href="/app/settings">Settings</s-link>
       </s-app-nav>

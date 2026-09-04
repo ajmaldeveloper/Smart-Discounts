@@ -5,6 +5,14 @@ name = "Winslet Smart Discounts"
 application_url = "https://winslet-smart-discounts.fly.dev"
 embedded = true
 
+# Backs the storefront free-shipping bar (extensions/winslet-storefront's
+# app embed) — the theme's JS calls /apps/winslet/free-shipping for live
+# campaign threshold + admin-configured colors, Shopify forwards it here.
+[app_proxy]
+url = "https://winslet-smart-discounts.fly.dev/apps/proxy"
+subpath = "winslet"
+prefix = "apps"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # read_customers/write_customers back M6 (Customer Intelligence) —

@@ -1,133 +1,25 @@
 {%- comment -%}
-  Free-shipping progress bar (M12). No theme-code injection — a
-  merchant adds this purely through Theme Editor's block picker and
-  sets the threshold to match their shipping campaign's own cart.subtotal
-  condition (see Winslet's Shipping reward). The two aren't
-  auto-synced: keeping this block's threshold aligned with the
-  campaign is the merchant's responsibility for now — reading the
-  live campaign config from the storefront would need an app proxy
-  endpoint, a fast-follow once this widget is validated.
+  Free-shipping progress bar — a global app embed (toggle it on once in
+  Theme Editor > App embeds, no per-page placement or settings needed).
 
-  Renders correctly on first paint using the theme's own `cart` Liquid
-  object (works even with JS disabled). The <winslet-shipping-progress>
-  custom element then keeps it live as the cart changes, refetching
-  /cart.js after the widest-supported cart-update signals: the
-  Shopify-dispatched `cart:updated`/`cart:refresh` CustomEvents most
-  modern themes fire after an AJAX add/update, and a fallback poll of
-  /cart.js on visibility change. Coverage isn't universal — a theme
-  using a wholly custom cart flow with neither signal will only update
-  on next page load, which is still correct, just not live.
+  Unlike the earlier version of this block, nothing here is hand-typed:
+  the threshold and colors/messages both come live from Winslet's App
+  Proxy (see apps.proxy.free-shipping.tsx and free-shipping-bar.js),
+  reading whichever campaign has an active free-shipping reward and
+  whatever styling the merchant set on the Storefront settings page —
+  so this can never drift out of sync with the real discount the way a
+  hand-typed threshold could.
 {%- endcomment -%}
 
-<winslet-shipping-progress
-  data-threshold-cents="{{ block.settings.threshold | times: 100 }}"
-  data-currency-symbol="{{ block.settings.currency_symbol | escape }}"
-  data-progress-message="{{ block.settings.progress_message | escape }}"
-  data-complete-message="{{ block.settings.complete_message | escape }}"
-  data-initial-total-cents="{{ cart.total_price }}"
-  style="display:block;"
-  {{ block.shopify_attributes }}
->
-  <div class="winslet-shipping-progress__bar-track" style="background:#e3e3e3;border-radius:999px;height:8px;overflow:hidden;">
-    <div class="winslet-shipping-progress__bar-fill" style="background:{{ block.settings.bar_color }};height:100%;border-radius:999px;width:0%;"></div>
-  </div>
-  <p class="winslet-shipping-progress__message" style="margin-top:8px;font-size:14px;"></p>
-</winslet-shipping-progress>
-
-<script>
-  (function () {
-    if (customElements.get("winslet-shipping-progress")) return;
-
-    class WinsletShippingProgress extends HTMLElement {
-      connectedCallback() {
-        this.thresholdCents = parseInt(this.dataset.thresholdCents, 10) || 0;
-        this.currencySymbol = this.dataset.currencySymbol || "$";
-        this.progressMessage = this.dataset.progressMessage || "Add {amount} more for free shipping!";
-        this.completeMessage = this.dataset.completeMessage || "You've unlocked free shipping!";
-        this.fillEl = this.querySelector(".winslet-shipping-progress__bar-fill");
-        this.messageEl = this.querySelector(".winslet-shipping-progress__message");
-
-        this.render(parseInt(this.dataset.initialTotalCents, 10) || 0);
-
-        this._onCartEvent = () => this.refresh();
-        document.addEventListener("cart:updated", this._onCartEvent);
-        document.addEventListener("cart:refresh", this._onCartEvent);
-        document.addEventListener("visibilitychange", () => {
-          if (document.visibilityState === "visible") this.refresh();
-        });
-      }
-
-      disconnectedCallback() {
-        document.removeEventListener("cart:updated", this._onCartEvent);
-        document.removeEventListener("cart:refresh", this._onCartEvent);
-      }
-
-      refresh() {
-        fetch("/cart.js", { headers: { accept: "application/json" } })
-          .then((response) => response.json())
-          .then((cart) => this.render(cart.total_price))
-          .catch(() => {
-            /* Network hiccup — the bar just keeps its last known state. */
-          });
-      }
-
-      render(totalCents) {
-        if (this.thresholdCents <= 0) return;
-
-        const remainingCents = Math.max(0, this.thresholdCents - totalCents);
-        const percent = Math.min(100, Math.round((totalCents / this.thresholdCents) * 100));
-        this.fillEl.style.width = percent + "%";
-
-        if (remainingCents <= 0) {
-          this.messageEl.textContent = this.completeMessage;
-        } else {
-          const amount = this.currencySymbol + (remainingCents / 100).toFixed(2);
-          this.messageEl.textContent = this.progressMessage.replace("{amount}", amount);
-        }
-      }
-    }
-
-    customElements.define("winslet-shipping-progress", WinsletShippingProgress);
-  })();
-</script>
+<script type="module" defer src="{{ 'free-shipping-bar.js' | asset_url }}"></script>
+<winslet-free-shipping-bar
+  data-proxy-root="/apps/winslet"
+  data-currency="{{ cart.currency.iso_code }}"
+></winslet-free-shipping-bar>
 
 {% schema %}
 {
-  "name": "Free shipping progress",
-  "target": "section",
-  "settings": [
-    {
-      "type": "number",
-      "id": "threshold",
-      "label": "Free shipping threshold",
-      "default": 100,
-      "info": "Match this to your Winslet shipping campaign's cart subtotal condition."
-    },
-    {
-      "type": "text",
-      "id": "currency_symbol",
-      "label": "Currency symbol",
-      "default": "$"
-    },
-    {
-      "type": "text",
-      "id": "progress_message",
-      "label": "Progress message",
-      "default": "Add {amount} more for free shipping!",
-      "info": "Use {amount} where the remaining amount should appear."
-    },
-    {
-      "type": "text",
-      "id": "complete_message",
-      "label": "Complete message",
-      "default": "You've unlocked free shipping!"
-    },
-    {
-      "type": "color",
-      "id": "bar_color",
-      "label": "Bar color",
-      "default": "#008060"
-    }
-  ]
+  "name": "Free shipping bar",
+  "target": "body"
 }
 {% endschema %}
