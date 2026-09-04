@@ -65,6 +65,23 @@ export interface TierBreak {
   freeGiftAllocation?: "CHEAPEST" | "MOST_EXPENSIVE";
 }
 
+/**
+ * "Mix and match": any `bundleSize` units from the campaign's own
+ * matching lines (e.g. "any product in this collection") bundle
+ * together for a flat `bundlePrice` total — "any 3 for $50" —
+ * regardless of which specific products make up the bundle or their
+ * individual prices. Bundles are filled cheapest-unit-first (same
+ * "maximize the shopper's benefit" convention as
+ * CHEAPEST_MATCHING_LINE elsewhere); leftover units that don't fill a
+ * complete bundle are never discounted. See
+ * extensions/winslet-discounts/src/cart_lines_discounts_generate_run.ts's
+ * estimateMixAndMatchDiscount for the actual per-line allocation.
+ */
+export interface MixAndMatchRule {
+  bundleSize: number;
+  bundlePrice: number;
+}
+
 export interface ProductReward {
   value: DiscountValue;
   // ALL_MATCHING_LINES: every cart line the campaign's conditions/scope
@@ -77,6 +94,10 @@ export interface ProductReward {
   // edits before turning tiering on.
   tierMetric?: TierMetric;
   tiers?: TierBreak[];
+  // When set, overrides `value`/`tiers`/`maxDiscountAmount` entirely —
+  // see MixAndMatchRule above. Mutually exclusive with `tiers`; a
+  // reward is either tiered or mix-and-match, never both.
+  mixAndMatch?: MixAndMatchRule;
   // Shown to the customer in their cart and at checkout next to the
   // discounted line (Shopify's own discountApplication "message").
   // Falls back to a generic default in the Function when blank — see
@@ -158,6 +179,18 @@ function normalizeFreeProductIds(record: Record<string, unknown>): string[] {
 }
 
 /** Drops any tier missing a valid minValue/value rather than rejecting the whole list — one bad row shouldn't cost a merchant every other tier they configured. */
+/** bundleSize must be a whole number >= 2 (a "bundle" of 1 is just a flat per-unit discount, already achievable via the Simple shape) — bundlePrice >= 0 (0 means "any N of these, free"). */
+function normalizeMixAndMatch(raw: unknown): MixAndMatchRule | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const record = raw as Record<string, unknown>;
+
+  if (!isFiniteNumber(record.bundleSize) || !isFiniteNumber(record.bundlePrice)) return undefined;
+  const bundleSize = Math.floor(record.bundleSize);
+  if (bundleSize < 2 || record.bundlePrice < 0) return undefined;
+
+  return { bundleSize, bundlePrice: record.bundlePrice };
+}
+
 function normalizeTiers(raw: unknown): TierBreak[] {
   if (!Array.isArray(raw)) return [];
 
@@ -209,6 +242,7 @@ export function normalizeRewardConfig(raw: unknown): RewardConfig {
       ? (productRecord.appliesTo as ProductReward["appliesTo"])
       : "ALL_MATCHING_LINES";
     const tiers = normalizeTiers(productRecord.tiers);
+    const mixAndMatch = normalizeMixAndMatch(productRecord.mixAndMatch);
     const name = normalizeRewardName(productRecord.name);
 
     if (value) {
@@ -216,7 +250,8 @@ export function normalizeRewardConfig(raw: unknown): RewardConfig {
         value,
         appliesTo,
         ...(isFiniteNumber(productRecord.maxDiscountAmount) ? { maxDiscountAmount: productRecord.maxDiscountAmount } : {}),
-        ...(tiers.length > 0 ? { tierMetric: normalizeTierMetric(productRecord.tierMetric), tiers } : {}),
+        // Mutually exclusive — mixAndMatch wins if a malformed campaign somehow has both.
+        ...(mixAndMatch ? { mixAndMatch } : tiers.length > 0 ? { tierMetric: normalizeTierMetric(productRecord.tierMetric), tiers } : {}),
         ...(name ? { name } : {}),
         ...normalizeMinimum(productRecord),
       };
@@ -313,6 +348,7 @@ export function resolveDiscountValue(
     maxDiscountAmount?: number;
     tierMetric?: TierMetric;
     tiers?: TierBreak[];
+    mixAndMatch?: MixAndMatchRule;
     minimumMetric?: TierMetric;
     minimumValue?: number;
   },
@@ -325,6 +361,16 @@ export function resolveDiscountValue(
   freeProductIds?: string[];
   freeGiftAllocation?: "CHEAPEST" | "MOST_EXPENSIVE";
 } | null {
+  // Mix and match has its own bundle-allocation math (see
+  // estimateMixAndMatchDiscount in the Function extension) — a flat
+  // value/tier resolution here would fall through to whatever stale
+  // `value` this reward happened to carry from a previous shape and
+  // report a wrong number, so this deliberately reports "no estimate"
+  // instead of a misleading one. Not reached by the checkout Function
+  // at all (it branches on mixAndMatch before ever calling this); only
+  // matters for admin-side callers like the Simulator.
+  if (reward.mixAndMatch) return null;
+
   if (reward.minimumValue !== undefined && reward.minimumValue > 0) {
     const minimumMetricValue = reward.minimumMetric === "cart.subtotal" ? metrics.subtotal : metrics.quantity;
     if (minimumMetricValue < reward.minimumValue) return null;

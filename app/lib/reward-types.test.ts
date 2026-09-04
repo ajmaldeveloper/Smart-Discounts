@@ -91,6 +91,57 @@ describe("normalizeRewardConfig", () => {
     expect(config.order?.tiers).toBeUndefined();
     expect(config.order?.tierMetric).toBeUndefined();
   });
+
+  it("normalizes a valid mixAndMatch rule on a product reward", () => {
+    const config = normalizeRewardConfig({
+      product: { value: { type: "percentage", value: 0 }, appliesTo: "ALL_MATCHING_LINES", mixAndMatch: { bundleSize: 3, bundlePrice: 50 } },
+    });
+    expect(config.product?.mixAndMatch).toEqual({ bundleSize: 3, bundlePrice: 50 });
+  });
+
+  it("floors a fractional bundleSize and rejects one below 2", () => {
+    const config = normalizeRewardConfig({
+      product: { value: { type: "percentage", value: 0 }, appliesTo: "ALL_MATCHING_LINES", mixAndMatch: { bundleSize: 3.7, bundlePrice: 50 } },
+    });
+    expect(config.product?.mixAndMatch?.bundleSize).toBe(3);
+
+    expect(
+      normalizeRewardConfig({
+        product: { value: { type: "percentage", value: 0 }, appliesTo: "ALL_MATCHING_LINES", mixAndMatch: { bundleSize: 1, bundlePrice: 50 } },
+      }).product?.mixAndMatch,
+    ).toBeUndefined();
+  });
+
+  it("rejects a negative bundlePrice", () => {
+    const config = normalizeRewardConfig({
+      product: { value: { type: "percentage", value: 0 }, appliesTo: "ALL_MATCHING_LINES", mixAndMatch: { bundleSize: 3, bundlePrice: -10 } },
+    });
+    expect(config.product?.mixAndMatch).toBeUndefined();
+  });
+
+  it("mixAndMatch wins over tiers when a malformed campaign somehow has both", () => {
+    const config = normalizeRewardConfig({
+      product: {
+        value: { type: "percentage", value: 0 },
+        appliesTo: "ALL_MATCHING_LINES",
+        mixAndMatch: { bundleSize: 3, bundlePrice: 50 },
+        tiers: [{ minValue: 2, value: { type: "percentage", value: 10 } }],
+      },
+    });
+    expect(config.product?.mixAndMatch).toEqual({ bundleSize: 3, bundlePrice: 50 });
+    expect(config.product?.tiers).toBeUndefined();
+  });
+
+  it("omits mixAndMatch for a missing/malformed value", () => {
+    expect(
+      normalizeRewardConfig({ product: { value: { type: "percentage", value: 10 }, appliesTo: "ALL_MATCHING_LINES" } }).product?.mixAndMatch,
+    ).toBeUndefined();
+    expect(
+      normalizeRewardConfig({
+        product: { value: { type: "percentage", value: 10 }, appliesTo: "ALL_MATCHING_LINES", mixAndMatch: "garbage" },
+      }).product?.mixAndMatch,
+    ).toBeUndefined();
+  });
 });
 
 describe("selectTier", () => {
@@ -116,6 +167,14 @@ describe("resolveDiscountValue", () => {
       { quantity: 1, subtotal: 1 },
     );
     expect(resolved).toEqual({ value: { type: "percentage", value: 10 }, maxDiscountAmount: 50 });
+  });
+
+  it("returns null for a mixAndMatch reward rather than falling through to a stale flat value", () => {
+    const resolved = resolveDiscountValue(
+      { value: { type: "percentage", value: 99 }, mixAndMatch: { bundleSize: 3, bundlePrice: 50 } },
+      { quantity: 3, subtotal: 60 },
+    );
+    expect(resolved).toBeNull();
   });
 
   it("resolves the qualifying tier's value/cap when tiers are configured, by quantity", () => {

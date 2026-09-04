@@ -21,12 +21,19 @@ export interface TierBreak {
   freeGiftAllocation?: "CHEAPEST" | "MOST_EXPENSIVE";
 }
 
+/** Mirrors app/lib/reward-types.ts's MixAndMatchRule EXACTLY — see that file's own comment for the full "any N for a flat price" rationale. */
+export interface MixAndMatchRule {
+  bundleSize: number;
+  bundlePrice: number;
+}
+
 export interface ProductReward {
   value: DiscountValue;
   appliesTo: "ALL_MATCHING_LINES" | "CHEAPEST_MATCHING_LINE" | "MOST_EXPENSIVE_MATCHING_LINE";
   maxDiscountAmount?: number;
   tierMetric?: TierMetric;
   tiers?: TierBreak[];
+  mixAndMatch?: MixAndMatchRule;
   name?: string;
   minimumMetric?: TierMetric;
   minimumValue?: number;
@@ -82,6 +89,7 @@ export function resolveDiscountValue(
     maxDiscountAmount?: number;
     tierMetric?: TierMetric;
     tiers?: TierBreak[];
+    mixAndMatch?: MixAndMatchRule;
     minimumMetric?: TierMetric;
     minimumValue?: number;
   },
@@ -94,6 +102,11 @@ export function resolveDiscountValue(
   freeProductIds?: string[];
   freeGiftAllocation?: "CHEAPEST" | "MOST_EXPENSIVE";
 } | null {
+  // Mirrors app/lib/reward-types.ts's own guard EXACTLY — not actually
+  // reached for product rewards (estimateProductDiscount branches on
+  // mixAndMatch before ever calling this), kept only for parity.
+  if (reward.mixAndMatch) return null;
+
   if (reward.minimumValue !== undefined && reward.minimumValue > 0) {
     const minimumMetricValue = reward.minimumMetric === "cart.subtotal" ? metrics.subtotal : metrics.quantity;
     if (minimumMetricValue < reward.minimumValue) return null;

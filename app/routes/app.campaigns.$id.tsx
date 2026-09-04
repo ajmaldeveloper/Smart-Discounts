@@ -313,7 +313,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     const normalized = normalizeRewardConfig(parsed);
     const tierRewards = [normalized.product, normalized.order].filter((reward): reward is NonNullable<typeof reward> => Boolean(reward));
-    const usesTiers = tierRewards.some((reward) => (reward.tiers?.length ?? 0) > 0);
+    // Mix and match (Product-only) shares the TIERS gate (see
+    // RewardEditor's own "mix and match" option) rather than its own
+    // plan dimension — both are "advanced Product reward shapes" in
+    // the same tier.
+    const usesTiers =
+      tierRewards.some((reward) => (reward.tiers?.length ?? 0) > 0) || Boolean(normalized.product?.mixAndMatch);
     const usesFreeGiftBogo = tierRewards.some((reward) => reward.tiers?.some((tier) => tier.freeProductIds?.length));
     const usesMinimumRequirement = [normalized.product, normalized.order, normalized.shipping].some((reward) => reward?.minimumValue !== undefined);
 

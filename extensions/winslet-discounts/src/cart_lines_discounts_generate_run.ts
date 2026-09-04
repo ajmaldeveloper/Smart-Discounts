@@ -6,7 +6,14 @@ import {
   type CartLinesDiscountsGenerateRunResult,
 } from "../generated/api";
 import { evaluateConditionNode, parseConditionTree, type ConditionContext, type ConditionGroup } from "./condition-engine";
-import { computeDiscountAmount, DEFAULT_DISCOUNT_MESSAGE, resolveDiscountValue, type ProductReward, type RewardConfig } from "./reward-engine";
+import {
+  computeDiscountAmount,
+  DEFAULT_DISCOUNT_MESSAGE,
+  resolveDiscountValue,
+  type MixAndMatchRule,
+  type ProductReward,
+  type RewardConfig,
+} from "./reward-engine";
 import { buildCartContext, buildLineContext, lineSubtotal, parseBuyerData, type ContextCartLine } from "./context";
 import type { CompiledCampaignConfig, CompiledSiblingCampaign } from "./compiled-campaign";
 import { resolveConflicts, type CampaignCandidate } from "./conflict-resolution";
@@ -57,6 +64,55 @@ interface ProductEstimate {
 }
 
 /** Evaluates ONE campaign's (self or sibling) product reward against this cart. Reused for every candidate so self and siblings are judged by byte-identical logic. */
+/**
+ * "Any N for $X": flattens the campaign's own matching lines into
+ * individual units, fills as many complete bundles of `bundleSize` as
+ * possible using the CHEAPEST units first (maximizing the shopper's
+ * benefit, same convention as CHEAPEST_MATCHING_LINE elsewhere), then
+ * discounts the bundled units down to `bundlePrice` per bundle.
+ * Leftover units that don't fill a complete bundle are left at full
+ * price. The resulting total discount is allocated back across
+ * whichever cart lines actually contributed bundled units,
+ * proportional to each line's own share of the bundled units' real
+ * price — so a bundle drawing from two differently-priced lines splits
+ * the discount fairly between them rather than evenly.
+ */
+export function estimateMixAndMatchDiscount(rule: MixAndMatchRule, matchedLines: ContextCartLine[], name: string | undefined): ProductEstimate {
+  const units: Array<{ line: ContextCartLine; unitPrice: number }> = [];
+  for (const line of matchedLines) {
+    const unitPrice = lineSubtotal(line) / line.quantity;
+    for (let i = 0; i < line.quantity; i++) units.push({ line, unitPrice });
+  }
+  units.sort((a, b) => a.unitPrice - b.unitPrice);
+
+  const bundleCount = Math.floor(units.length / rule.bundleSize);
+  if (bundleCount === 0) return { targetLines: [], totalAmount: 0 };
+
+  const unitsInBundles = units.slice(0, bundleCount * rule.bundleSize);
+  const actualTotal = unitsInBundles.reduce((sum, unit) => sum + unit.unitPrice, 0);
+  const totalDiscount = Math.max(0, actualTotal - bundleCount * rule.bundlePrice);
+  if (totalDiscount <= 0) return { targetLines: [], totalAmount: 0 };
+
+  const perLine = new Map<string, { line: ContextCartLine; quantity: number; ownPrice: number }>();
+  for (const unit of unitsInBundles) {
+    const existing = perLine.get(unit.line.id);
+    if (existing) {
+      existing.quantity += 1;
+      existing.ownPrice += unit.unitPrice;
+    } else {
+      perLine.set(unit.line.id, { line: unit.line, quantity: 1, ownPrice: unit.unitPrice });
+    }
+  }
+
+  const targetLines = [...perLine.values()].map(({ line, quantity, ownPrice }) => ({
+    line,
+    quantity,
+    amount: (ownPrice / actualTotal) * totalDiscount,
+  }));
+
+  return { targetLines, totalAmount: totalDiscount, name };
+}
+
 function estimateProductDiscount(
   conditions: ConditionGroup,
   reward: ProductReward | undefined,
@@ -72,6 +128,8 @@ function estimateProductDiscount(
   });
 
   if (matchedLines.length === 0) return { targetLines: [], totalAmount: 0 };
+
+  if (reward.mixAndMatch) return estimateMixAndMatchDiscount(reward.mixAndMatch, matchedLines, reward.name);
 
   // A free-gift tier's "buy X" is measured against the campaign's own
   // matching lines, not the whole cart — "buy 2 of the assigned

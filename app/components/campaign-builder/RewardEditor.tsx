@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import type {
   DiscountValue,
+  MixAndMatchRule,
   OrderReward,
   ProductReward,
   RewardConfig,
@@ -80,6 +81,7 @@ export default function RewardEditor({ value, onChange, currencyCode, productRef
               reward={value.product}
               currency={currency}
               bogo
+              mixAndMatch
               productRefs={productRefs}
               onProductRefsChange={onProductRefsChange}
               hideName={campaignKind === "CODE"}
@@ -193,9 +195,10 @@ function RewardSection({
   );
 }
 
-type DiscountShape = "SIMPLE" | "TIERS" | "BOGO";
+type DiscountShape = "SIMPLE" | "TIERS" | "BOGO" | "MIX_AND_MATCH";
 type Minimum = { minimumMetric?: TierMetric; minimumValue?: number };
-type TieredReward = { value: DiscountValue; maxDiscountAmount?: number; appliesTo?: ProductReward["appliesTo"] } & Tiered & Minimum;
+type TieredReward = { value: DiscountValue; maxDiscountAmount?: number; appliesTo?: ProductReward["appliesTo"]; mixAndMatch?: MixAndMatchRule } & Tiered &
+  Minimum;
 
 /**
  * Shared by Product and Order rewards (M7): a flat value/cap, a ladder
@@ -212,6 +215,7 @@ function TieredValueEditor({
   currency,
   onChange,
   bogo = false,
+  mixAndMatch = false,
   productRefs,
   onProductRefsChange,
   hideName = false,
@@ -229,6 +233,10 @@ function TieredValueEditor({
   // a concept that only makes sense once there's a "line" to speak of.
   // Order rewards discount the whole cart subtotal as one flat amount.
   bogo?: boolean;
+  // Same reasoning as bogo — "any N units from this pool bundle for a
+  // flat price" only makes sense once there are individual lines/units
+  // to bundle, so Order rewards don't get this shape either.
+  mixAndMatch?: boolean;
   productRefs?: HydratedResourceRef[];
   onProductRefsChange?: (next: HydratedResourceRef[]) => void;
   // A code campaign's cart/checkout always shows the CODE itself, never
@@ -243,12 +251,13 @@ function TieredValueEditor({
   const tiers = reward.tiers ?? [];
   const isTiered = tiers.length > 0;
   const isBogo = bogo && isTiered && tiers.length === 1 && tiers[0].getQuantity !== undefined;
-  const shape: DiscountShape = !isTiered ? "SIMPLE" : isBogo ? "BOGO" : "TIERS";
+  const isMixAndMatch = mixAndMatch && Boolean(reward.mixAndMatch);
+  const shape: DiscountShape = isMixAndMatch ? "MIX_AND_MATCH" : !isTiered ? "SIMPLE" : isBogo ? "BOGO" : "TIERS";
   const metric = reward.tierMetric ?? "cart.quantity";
 
   const setShape = (next: DiscountShape) => {
     if (next === "SIMPLE") {
-      onChange({ tierMetric: undefined, tiers: undefined });
+      onChange({ tierMetric: undefined, tiers: undefined, mixAndMatch: undefined });
       return;
     }
 
@@ -256,6 +265,21 @@ function TieredValueEditor({
       onChange({
         tierMetric: metric,
         tiers: isTiered && !isBogo ? tiers : [{ minValue: defaultMinValueFor(metric), value: reward.value }],
+        mixAndMatch: undefined,
+      });
+      return;
+    }
+
+    if (next === "MIX_AND_MATCH") {
+      onChange({
+        tierMetric: undefined,
+        tiers: undefined,
+        // Same reasoning as BOGO below — the bundle size already IS the
+        // qualifying quantity, so a separate minimum requirement would
+        // just be redundant or silently conflicting.
+        minimumMetric: undefined,
+        minimumValue: undefined,
+        mixAndMatch: reward.mixAndMatch ?? { bundleSize: 3, bundlePrice: 0 },
       });
       return;
     }
@@ -271,6 +295,7 @@ function TieredValueEditor({
       // the one and only quantity gate for this shape.
       minimumMetric: undefined,
       minimumValue: undefined,
+      mixAndMatch: undefined,
       ...(bogo ? { appliesTo: "CHEAPEST_MATCHING_LINE" as const } : {}),
     });
   };
@@ -281,10 +306,11 @@ function TieredValueEditor({
   // no way to tell which one actually does anything (Tiers keeps both:
   // this is the default, each tier row can still override it).
   const showTopLevelName = !hideName && shape !== "BOGO";
-  // See setShape's BOGO branch above — "Buy X" already IS the minimum
-  // requirement for this shape, so a second, separate minimum-quantity
-  // field here is redundant at best and silently conflicting at worst.
-  const showMinimumRequirement = shape !== "BOGO";
+  // See setShape's BOGO/MIX_AND_MATCH branches above — both already
+  // have their own built-in qualifying quantity (Buy X, or the bundle
+  // size), so a second, separate minimum-quantity field here is
+  // redundant at best and silently conflicting at worst.
+  const showMinimumRequirement = shape !== "BOGO" && shape !== "MIX_AND_MATCH";
 
   // Exactly as many equal tracks as fields actually rendered below —
   // MinimumRequirementFields renders 1 field ("None") or 2 (a type set)
@@ -309,6 +335,11 @@ function TieredValueEditor({
               {hasTiers ? "Buy X, get Y free" : "Buy X, get Y free (upgrade required)"}
             </s-option>
           )}
+          {mixAndMatch && (
+            <s-option value="MIX_AND_MATCH" disabled={!hasTiers}>
+              {hasTiers ? "Mix and match (any N for a set price)" : "Mix and match (upgrade required)"}
+            </s-option>
+          )}
         </s-select>
 
         {showMinimumRequirement && (
@@ -322,7 +353,7 @@ function TieredValueEditor({
         )}
       </s-grid>
 
-      {shape !== "BOGO" && reward.appliesTo !== undefined && (
+      {shape !== "BOGO" && shape !== "MIX_AND_MATCH" && reward.appliesTo !== undefined && (
         <s-select
           label="Applies to"
           value={reward.appliesTo}
@@ -363,6 +394,59 @@ function TieredValueEditor({
           onChange={(nextTier) => onChange({ tierMetric: "cart.quantity", tiers: [nextTier] })}
         />
       )}
+
+      {shape === "MIX_AND_MATCH" && reward.mixAndMatch && (
+        <MixAndMatchEditor
+          rule={reward.mixAndMatch}
+          currency={currency}
+          onChange={(nextRule) => onChange({ mixAndMatch: nextRule })}
+        />
+      )}
+    </s-stack>
+  );
+}
+
+/**
+ * "Any N for $X": a plain bundle size + flat bundle price. Unlike
+ * BOGO's ramp of tiers, this has no ladder — a shopper either has
+ * enough matching units for at least one bundle, or they don't. See
+ * MixAndMatchRule in reward-types.ts for the exact semantics and
+ * extensions/winslet-discounts/src/cart_lines_discounts_generate_run.ts's
+ * estimateMixAndMatchDiscount for how it's actually applied at checkout.
+ */
+function MixAndMatchEditor({
+  rule,
+  currency,
+  onChange,
+}: {
+  rule: MixAndMatchRule;
+  currency: string;
+  onChange: (next: MixAndMatchRule) => void;
+}) {
+  return (
+    <s-stack direction="block" gap="base">
+      <s-grid gridTemplateColumns="repeat(2, minmax(160px, 1fr))" gap="base">
+        <s-number-field
+          label="Bundle size"
+          details="How many matching items make up one bundle."
+          min={2}
+          value={String(rule.bundleSize)}
+          onInput={(event: ControlEvent) => onChange({ ...rule, bundleSize: Math.max(2, Math.floor(Number(readValue(event)) || 2)) })}
+        />
+        <s-number-field
+          label="Bundle price"
+          details="Total price for one full bundle."
+          min={0}
+          prefix={currency}
+          value={String(rule.bundlePrice)}
+          onInput={(event: ControlEvent) => onChange({ ...rule, bundlePrice: Math.max(0, Number(readValue(event)) || 0) })}
+        />
+      </s-grid>
+      <s-paragraph>
+        e.g. any {rule.bundleSize} matching items for {currency}
+        {rule.bundlePrice} total — cheapest items fill each bundle first, and leftover items that don&apos;t complete a
+        full bundle stay at full price.
+      </s-paragraph>
     </s-stack>
   );
 }
