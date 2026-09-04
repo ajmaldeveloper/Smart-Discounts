@@ -1,0 +1,19 @@
+{%- comment -%}
+  A/B test bucket assignment (see app/routes/apps.proxy.ab-test.tsx and
+  public/widgets/ab-test-bootstrap.js for the full mechanism) — an app
+  embed rather than a copy-paste snippet like the other storefront
+  widgets, because it renders NOTHING visible. The copy-paste-snippet
+  pivot elsewhere in this app was specifically about avoiding a
+  `position:fixed` widget colliding with a theme's own sticky header —
+  that concern doesn't exist here, so a plain Theme Editor toggle is
+  simpler and harder to get wrong than editing theme.liquid by hand.
+{%- endcomment -%}
+
+<script src="https://winslet-smart-discounts.fly.dev/widgets/ab-test-bootstrap.js" defer></script>
+
+{% schema %}
+{
+  "name": "Winslet — A/B testing",
+  "target": "body"
+}
+{% endschema %}

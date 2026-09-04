@@ -272,6 +272,48 @@
     }
   }
 
+  function currencySymbolFor(currency) {
+    try {
+      var parts = new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: currency || "USD",
+        currencyDisplay: "narrowSymbol",
+      }).formatToParts(0);
+      var currencyPart = parts.find(function (part) {
+        return part.type === "currency";
+      });
+      return currencyPart ? currencyPart.value : currency || "";
+    } catch (error) {
+      return currency || "";
+    }
+  }
+
+  // "{{token_name}}", double-curly snake_case — matches this
+  // developer's own bundle-upsells app's template convention. An
+  // unknown token is left untouched rather than silently deleted.
+  function resolveTemplateTokens(text, values) {
+    return text.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/g, function (match, token) {
+      return Object.prototype.hasOwnProperty.call(values, token) ? values[token] : match;
+    });
+  }
+
+  // {{product_title}}/{{price}} reference the free-gift pool's FIRST
+  // product — a documented simplification for a campaign with more
+  // than one eligible gift, where one shared bar message can't
+  // unambiguously name "the" product the way each individual product
+  // card (which already shows its own real title/price directly) can.
+  function giftTokenValues(config, remaining, fallbackCurrency) {
+    var product = (config.products || [])[0];
+    var currency = (product && product.currencyCode) || fallbackCurrency;
+    return {
+      remaining: String(remaining),
+      product_title: product ? product.title : "",
+      price: product ? formatMoney(Number(product.price), currency) : "",
+      currency_symbol: currencySymbolFor(currency),
+      currency_code: currency || "",
+    };
+  }
+
   function applySharedStyleVars(el, config) {
     el.style.setProperty("--winslet-bgp-thickness", config.barThickness + "px");
     el.style.setProperty("--winslet-bgp-mobile-thickness", config.mobileBarThickness + "px");
@@ -433,9 +475,9 @@
       var result = qualification(config, cart);
       this.fillEl.style.width = result.percent + "%";
       this.fillEl.style.backgroundColor = result.qualified ? config.unlockedColor : config.progressColor;
-      this.messageEl.textContent = result.qualified
-        ? config.unlockedMessage
-        : config.lockedMessage.replace(/\{remaining\}/g, String(result.remaining));
+
+      var template = result.redeemed ? config.addedMessage : result.qualified ? config.unlockedMessage : config.lockedMessage;
+      this.messageEl.textContent = resolveTemplateTokens(template, giftTokenValues(config, result.remaining, this.currency));
     }
   }
 

@@ -70,12 +70,22 @@
     return config.discountValue + "%";
   }
 
+  // "{{token_name}}", double-curly snake_case — matches this
+  // developer's own bundle-upsells app's template convention. An
+  // unknown token is left untouched rather than silently deleted.
+  function resolveTemplateTokens(text, values) {
+    return text.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/g, function (match, token) {
+      return Object.prototype.hasOwnProperty.call(values, token) ? values[token] : match;
+    });
+  }
+
   function applyTokens(template, remaining, metric, currency, config) {
-    return template
-      .replace(/\{remaining\}/g, formatRemainingNumber(remaining, metric))
-      .replace(/\{currency_symbol\}/g, currencySymbolFor(currency))
-      .replace(/\{currency_code\}/g, currency || "")
-      .replace(/\{discount\}/g, formatDiscount(config, currency));
+    return resolveTemplateTokens(template, {
+      remaining: formatRemainingNumber(remaining, metric),
+      currency_symbol: currencySymbolFor(currency),
+      currency_code: currency || "",
+      discount: formatDiscount(config, currency),
+    });
   }
 
   class Bar extends HTMLElement {

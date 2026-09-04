@@ -97,13 +97,14 @@
     document.head.appendChild(style);
   }
 
-  // {remaining} is deliberately a bare number, never a formatted money
-  // string — Intl's own "$" rendering varies by locale (e.g. "US$" to
-  // disambiguate from other dollar currencies, merchant-reported as
-  // confusing) and baking in a symbol would leave a merchant with no
-  // way to control placement, spacing, or whether one shows at all for
-  // a quantity-based threshold. {currency_symbol}/{currency_code} are
-  // separate tokens the merchant composes into their own message text.
+  // {{remaining}} is deliberately a bare number, never a formatted
+  // money string — Intl's own "$" rendering varies by locale (e.g.
+  // "US$" to disambiguate from other dollar currencies, merchant-
+  // reported as confusing) and baking in a symbol would leave a
+  // merchant with no way to control placement, spacing, or whether one
+  // shows at all for a quantity-based threshold. {{currency_symbol}}/
+  // {{currency_code}} are separate tokens the merchant composes into
+  // their own message text.
   function formatRemainingNumber(amount, metric) {
     return metric === "cart.quantity" ? String(Math.ceil(amount)) : amount.toFixed(2);
   }
@@ -124,11 +125,23 @@
     }
   }
 
+  // "{{token_name}}", double-curly snake_case — matches this
+  // developer's own bundle-upsells app's template convention. An
+  // unknown token (typo, or one that doesn't apply here) is left
+  // untouched rather than silently deleted, so a mistake is visible
+  // instead of vanishing.
+  function resolveTemplateTokens(text, values) {
+    return text.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/g, function (match, token) {
+      return Object.prototype.hasOwnProperty.call(values, token) ? values[token] : match;
+    });
+  }
+
   function applyTokens(template, remaining, metric, currency) {
-    return template
-      .replace(/\{remaining\}/g, formatRemainingNumber(remaining, metric))
-      .replace(/\{currency_symbol\}/g, currencySymbolFor(currency))
-      .replace(/\{currency_code\}/g, currency || "");
+    return resolveTemplateTokens(template, {
+      remaining: formatRemainingNumber(remaining, metric),
+      currency_symbol: currencySymbolFor(currency),
+      currency_code: currency || "",
+    });
   }
 
   class Bar extends HTMLElement {

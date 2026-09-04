@@ -74,13 +74,13 @@ export interface FreeShippingBarSettings extends BarSizingSettings {
   nearThresholdPercent: number;
   // Shown while below the threshold. Three tokens, all substituted
   // client-side (the storefront script knows the shopper's live cart
-  // and locale, this stored string never does): "{remaining}" — a bare
+  // and locale, this stored string never does): "{{remaining}}" — a bare
   // number, never pre-formatted with a currency symbol, so the
   // merchant fully controls placement/spacing/whether one shows at
-  // all for a quantity-based threshold; "{currency_symbol}" and
-  // "{currency_code}" — e.g. "$" and "USD", composed in by the
-  // merchant however they like ("{currency_symbol}{remaining}" vs.
-  // "{remaining} {currency_code}").
+  // all for a quantity-based threshold; "{{currency_symbol}}" and
+  // "{{currency_code}}" — e.g. "$" and "USD", composed in by the
+  // merchant however they like ("{{currency_symbol}}{{remaining}}" vs.
+  // "{{remaining}} {{currency_code}}").
   progressMessage: string;
   // Shown once the threshold is met.
   completeMessage: string;
@@ -91,7 +91,7 @@ export interface FreeShippingBarSettings extends BarSizingSettings {
  * FreeShippingBarSettings (start/near/reached), just tracking an
  * active campaign's Order reward (a %/fixed-amount discount on the
  * whole order) instead of free shipping. progressMessage/
- * completeMessage additionally support a "{discount}" token (e.g.
+ * completeMessage additionally support a "{{discount}}" token (e.g.
  * "15%" or "$10"), substituted client-side from the reward's own
  * value/type — never stored here, so it can never drift from the real
  * discount.
@@ -116,11 +116,21 @@ export interface BogoGiftSettings extends BarSizingSettings {
   trackColor: string;
   progressColor: string;
   unlockedColor: string;
+  // lockedMessage/unlockedMessage/addedMessage all share one token set
+  // (bogo-gift-picker.js's giftTokenValues): {{remaining}} (units still
+  // needed), {{currency_symbol}}, {{currency_code}}, plus
+  // {{product_title}}/{{price}} for the free-gift pool's first product
+  // — a documented simplification for a campaign with more than one
+  // eligible gift, where one shared message can't unambiguously name
+  // "the" product the way each product's own card already does.
   // Shown while the shopper hasn't met the campaign's buy quantity yet.
-  // Same token set as FreeShippingBarSettings.progressMessage.
   lockedMessage: string;
   // Shown once they've qualified for at least one free unit.
   unlockedMessage: string;
+  // Shown once the free gift is actually in the cart — see
+  // bogo-gift-picker.js's qualification()/redeemed for how that's
+  // told apart from merely being qualified but not yet added.
+  addedMessage: string;
   addButtonColor: string;
   addButtonTextColor: string;
   // The Add-to-cart button's own label — e.g. "Add", "Claim gift",
@@ -199,6 +209,21 @@ export interface CountdownTimerSettings {
   textColor: string;
   digitBackgroundColor: string;
   digitTextColor: string;
+  // The "Days"/"Hrs"/"Min"/"Sec" captions under each number — a
+  // separate color since they're deliberately more muted than the
+  // digit value itself, but merchants asked to control that
+  // relationship rather than have it always be an opacity tweak.
+  labelColor: string;
+  // Hides the "Days"/"Hrs"/"Min"/"Sec" captions entirely, leaving just
+  // the four numbers.
+  showLabels: boolean;
+  // Corner rounding of each digit's box, in px — 999 reads as a full
+  // pill (same convention as BarSizingSettings.barRoundness).
+  digitRadius: number;
+  mobileDigitRadius: number;
+  // Horizontal space between the four digit boxes, in px.
+  digitGap: number;
+  mobileDigitGap: number;
   messageFontSize: number;
   mobileMessageFontSize: number;
   paddingTop: number;
@@ -218,18 +243,18 @@ export interface CountdownTimerSettings {
  * where each tier sits, unlike the single-threshold bars above. No
  * per-tier text is stored here; messageTemplate/completeMessage are
  * reused across however many tiers the active campaign has, via
- * {remaining} and {discount} tokens resolved against whichever tier
+ * {{remaining}} and {{discount}} tokens resolved against whichever tier
  * is currently next/current.
  */
 export interface TierProgressBarSettings extends BarSizingSettings {
   trackColor: string;
   progressColor: string;
   reachedColor: string;
-  // Shown while below the highest tier. Tokens: {remaining} (bare
-  // number to the next tier), {currency_symbol}, {currency_code},
-  // {discount} (the NEXT tier's %/amount, e.g. "15%" or "$10").
+  // Shown while below the highest tier. Tokens: {{remaining}} (bare
+  // number to the next tier), {{currency_symbol}}, {{currency_code}},
+  // {{discount}} (the NEXT tier's %/amount, e.g. "15%" or "$10").
   messageTemplate: string;
-  // Shown once the highest tier is met. Token: {discount} (the
+  // Shown once the highest tier is met. Token: {{discount}} (the
   // highest tier's own %/amount).
   completeMessage: string;
 }
@@ -237,8 +262,8 @@ export interface TierProgressBarSettings extends BarSizingSettings {
 /**
  * A click-to-open popup listing every tier of the active volume/
  * quantity discount ("Buy 2+, save 10% · Buy 4+, save 20%") — one
- * rowTemplate reused per tier via {quantity} (that tier's minValue)
- * and {discount} tokens, with the shopper's current tier highlighted
+ * rowTemplate reused per tier via {{quantity}} (that tier's minValue)
+ * and {{discount}} tokens, with the shopper's current tier highlighted
  * in accentColor.
  */
 export interface TierListSettings {
@@ -297,7 +322,7 @@ const DEFAULT_FREE_SHIPPING_BAR: FreeShippingBarSettings = {
   nearColor: "#ffc453",
   reachedColor: "#008060",
   nearThresholdPercent: 75,
-  progressMessage: "Spend {currency_symbol}{remaining} more for free shipping!",
+  progressMessage: "Spend {{currency_symbol}}{{remaining}} more for free shipping!",
   completeMessage: "You've unlocked free shipping!",
 };
 
@@ -308,8 +333,8 @@ const DEFAULT_ORDER_DISCOUNT_BAR: OrderDiscountBarSettings = {
   nearColor: "#ffc453",
   reachedColor: "#008060",
   nearThresholdPercent: 75,
-  progressMessage: "Spend {currency_symbol}{remaining} more for {discount} off your order!",
-  completeMessage: "You've unlocked {discount} off your order!",
+  progressMessage: "Spend {{currency_symbol}}{{remaining}} more for {{discount}} off your order!",
+  completeMessage: "You've unlocked {{discount}} off your order!",
 };
 
 const DEFAULT_BOGO_GIFT: BogoGiftSettings = {
@@ -317,8 +342,9 @@ const DEFAULT_BOGO_GIFT: BogoGiftSettings = {
   trackColor: "#f1f2f3",
   progressColor: "#8c9196",
   unlockedColor: "#008060",
-  lockedMessage: "Add {remaining} more to unlock a free gift!",
+  lockedMessage: "Add {{remaining}} more to unlock a free gift!",
   unlockedMessage: "Your free gift is ready — add it below!",
+  addedMessage: "Your free gift has been added to your cart!",
   addButtonColor: "#008060",
   addButtonTextColor: "#ffffff",
   addButtonLabel: "Add",
@@ -339,6 +365,12 @@ const DEFAULT_COUNTDOWN_TIMER: CountdownTimerSettings = {
   textColor: "#ffffff",
   digitBackgroundColor: "#2c2c2c",
   digitTextColor: "#ffffff",
+  labelColor: "#ffffff",
+  showLabels: true,
+  digitRadius: 6,
+  mobileDigitRadius: 6,
+  digitGap: 8,
+  mobileDigitGap: 6,
   messageFontSize: 14,
   mobileMessageFontSize: 13,
   paddingTop: 12,
@@ -376,14 +408,14 @@ const DEFAULT_TIER_PROGRESS_BAR: TierProgressBarSettings = {
   trackColor: "#f1f2f3",
   progressColor: "#8c9196",
   reachedColor: "#008060",
-  messageTemplate: "Add {remaining} more for {discount} off!",
-  completeMessage: "You've unlocked {discount} off — our best discount!",
+  messageTemplate: "Add {{remaining}} more for {{discount}} off!",
+  completeMessage: "You've unlocked {{discount}} off — our best discount!",
 };
 
 const DEFAULT_TIER_LIST: TierListSettings = {
   heading: "Bulk discounts",
   triggerLabel: "See bulk pricing",
-  rowTemplate: "Buy {quantity}+, save {discount}",
+  rowTemplate: "Buy {{quantity}}+, save {{discount}}",
   backgroundColor: "#ffffff",
   textColor: "#1a1a1a",
   accentColor: "#008060",
@@ -520,6 +552,7 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
       unlockedColor: normalizeHexColor(giftRecord.unlockedColor, DEFAULT_BOGO_GIFT.unlockedColor),
       lockedMessage: normalizeMessage(giftRecord.lockedMessage, DEFAULT_BOGO_GIFT.lockedMessage),
       unlockedMessage: normalizeMessage(giftRecord.unlockedMessage, DEFAULT_BOGO_GIFT.unlockedMessage),
+      addedMessage: normalizeMessage(giftRecord.addedMessage, DEFAULT_BOGO_GIFT.addedMessage),
       addButtonColor: normalizeHexColor(giftRecord.addButtonColor, DEFAULT_BOGO_GIFT.addButtonColor),
       addButtonTextColor: normalizeHexColor(giftRecord.addButtonTextColor, DEFAULT_BOGO_GIFT.addButtonTextColor),
       addButtonLabel: normalizeMessage(giftRecord.addButtonLabel, DEFAULT_BOGO_GIFT.addButtonLabel),
@@ -599,6 +632,12 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
       textColor: normalizeHexColor(countdownRecord.textColor, DEFAULT_COUNTDOWN_TIMER.textColor),
       digitBackgroundColor: normalizeHexColor(countdownRecord.digitBackgroundColor, DEFAULT_COUNTDOWN_TIMER.digitBackgroundColor),
       digitTextColor: normalizeHexColor(countdownRecord.digitTextColor, DEFAULT_COUNTDOWN_TIMER.digitTextColor),
+      labelColor: normalizeHexColor(countdownRecord.labelColor, DEFAULT_COUNTDOWN_TIMER.labelColor),
+      showLabels: normalizeBoolean(countdownRecord.showLabels, DEFAULT_COUNTDOWN_TIMER.showLabels),
+      digitRadius: normalizePixels(countdownRecord.digitRadius, DEFAULT_COUNTDOWN_TIMER.digitRadius, 999),
+      mobileDigitRadius: normalizePixels(countdownRecord.mobileDigitRadius, DEFAULT_COUNTDOWN_TIMER.mobileDigitRadius, 999),
+      digitGap: normalizePixels(countdownRecord.digitGap, DEFAULT_COUNTDOWN_TIMER.digitGap, 64),
+      mobileDigitGap: normalizePixels(countdownRecord.mobileDigitGap, DEFAULT_COUNTDOWN_TIMER.mobileDigitGap, 64),
       messageFontSize: normalizePixels(countdownRecord.messageFontSize, DEFAULT_COUNTDOWN_TIMER.messageFontSize, 48),
       mobileMessageFontSize: normalizePixels(countdownRecord.mobileMessageFontSize, DEFAULT_COUNTDOWN_TIMER.mobileMessageFontSize, 48),
       paddingTop: normalizePixels(countdownRecord.paddingTop, DEFAULT_COUNTDOWN_TIMER.paddingTop, 200),

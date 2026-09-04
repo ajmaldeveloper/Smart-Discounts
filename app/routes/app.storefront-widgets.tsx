@@ -171,6 +171,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     tierList: settings.tierList,
     countdownTimer: settings.countdownTimer,
     shopTimezone: shop?.timezone ?? "UTC",
+    shop: session.shop,
   };
 };
 
@@ -317,6 +318,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const textColor = String(formData.get("textColor") ?? "").trim();
     const digitBackgroundColor = String(formData.get("digitBackgroundColor") ?? "").trim();
     const digitTextColor = String(formData.get("digitTextColor") ?? "").trim();
+    const labelColor = String(formData.get("labelColor") ?? "").trim();
+    const showLabels = formData.get("showLabels") === "true";
+    const digitRadius = Number(String(formData.get("digitRadius") ?? "").trim());
+    const mobileDigitRadius = Number(String(formData.get("mobileDigitRadius") ?? "").trim());
+    const digitGap = Number(String(formData.get("digitGap") ?? "").trim());
+    const mobileDigitGap = Number(String(formData.get("mobileDigitGap") ?? "").trim());
 
     if (!message) return { error: "Enter a message." } satisfies ActionData;
     for (const [label, value] of [
@@ -324,8 +331,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ["Text", textColor],
       ["Digit background", digitBackgroundColor],
       ["Digit text", digitTextColor],
+      ["Label", labelColor],
     ] as const) {
       if (!HEX_COLOR.test(value)) return { error: `${label} color must be a valid hex color (e.g. #008060).` } satisfies ActionData;
+    }
+    for (const [label, value, max] of [
+      ["Digit box roundness", digitRadius, 999],
+      ["Mobile digit box roundness", mobileDigitRadius, 999],
+      ["Gap between digits", digitGap, 64],
+      ["Mobile gap between digits", mobileDigitGap, 64],
+    ] as const) {
+      if (!Number.isFinite(value) || value < 0 || value > max) {
+        return { error: `${label} must be a number between 0 and ${max}.` } satisfies ActionData;
+      }
     }
     if (restartMode === "fixed") {
       if (!endAt || Number.isNaN(new Date(endAt).getTime())) return { error: "Choose a valid end date/time." } satisfies ActionData;
@@ -359,6 +377,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       textColor,
       digitBackgroundColor,
       digitTextColor,
+      labelColor,
+      showLabels,
+      digitRadius,
+      mobileDigitRadius,
+      digitGap,
+      mobileDigitGap,
     };
 
     await db.shop.update({
@@ -490,6 +514,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const addButtonTextColor = String(formData.get("addButtonTextColor") ?? "").trim();
     const lockedMessage = String(formData.get("lockedMessage") ?? "").trim();
     const unlockedMessage = String(formData.get("unlockedMessage") ?? "").trim();
+    const addedMessage = String(formData.get("addedMessage") ?? "").trim();
     const addButtonLabel = String(formData.get("addButtonLabel") ?? "").trim();
 
     for (const [label, value] of [
@@ -503,6 +528,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (!lockedMessage) return { error: "Enter a locked message." } satisfies ActionData;
     if (!unlockedMessage) return { error: "Enter an unlocked message." } satisfies ActionData;
+    if (!addedMessage) return { error: "Enter a product added message." } satisfies ActionData;
     if (!addButtonLabel) return { error: "Enter an Add button label." } satisfies ActionData;
 
     const bogoGift: BogoGiftSettings = {
@@ -514,6 +540,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       addButtonTextColor,
       lockedMessage,
       unlockedMessage,
+      addedMessage,
       addButtonLabel,
     };
 
@@ -782,7 +809,7 @@ function FreeShippingBarSection({ initial }: { initial: FreeShippingBarSettings 
 
             <s-text-field
               label="Progress message"
-              details="Shown below the threshold. Tokens: {remaining} (bare number), {currency_symbol} (e.g. $), {currency_code} (e.g. USD)."
+              details="Shown below the threshold. Tokens: {{remaining}} (bare number), {{currency_symbol}} (e.g. $), {{currency_code}} (e.g. USD)."
               value={draft.progressMessage}
               onInput={(event: ControlEvent) => update("progressMessage", readValue(event))}
             />
@@ -905,7 +932,7 @@ function OrderDiscountBarSection({ initial }: { initial: OrderDiscountBarSetting
 
             <s-text-field
               label="Progress message"
-              details="Shown below the threshold. Tokens: {remaining} (bare number), {currency_symbol} (e.g. $), {currency_code} (e.g. USD), {discount} (e.g. 15% or $10)."
+              details="Shown below the threshold. Tokens: {{remaining}} (bare number), {{currency_symbol}} (e.g. $), {{currency_code}} (e.g. USD), {{discount}} (e.g. 15% or $10)."
               value={draft.progressMessage}
               onInput={(event: ControlEvent) => update("progressMessage", readValue(event))}
             />
@@ -1019,14 +1046,14 @@ function TierProgressBarSection({ initial }: { initial: TierProgressBarSettings 
 
             <s-text-field
               label="Progress message"
-              details="Shown below the highest tier. Tokens: {remaining} (to the next tier), {currency_symbol}, {currency_code}, {discount} (the next tier's %/amount)."
+              details="Shown below the highest tier. Tokens: {{remaining}} (to the next tier), {{currency_symbol}}, {{currency_code}}, {{discount}} (the next tier's %/amount)."
               value={draft.messageTemplate}
               onInput={(event: ControlEvent) => update("messageTemplate", readValue(event))}
             />
 
             <s-text-field
               label="Complete message"
-              details="Shown once the highest tier is met. Token: {discount} (the highest tier's %/amount)."
+              details="Shown once the highest tier is met. Token: {{discount}} (the highest tier's %/amount)."
               value={draft.completeMessage}
               onInput={(event: ControlEvent) => update("completeMessage", readValue(event))}
             />
@@ -1127,16 +1154,23 @@ function BogoGiftSection({ initial }: { initial: BogoGiftSettings }) {
 
             <s-text-field
               label="Locked message"
-              details="Shown before the shopper qualifies. Token: {remaining} (units still needed)."
+              details="Shown before the shopper qualifies. Tokens: {{remaining}} (units still needed), {{product_title}}, {{price}}, {{currency_symbol}}, {{currency_code}}."
               value={draft.lockedMessage}
               onInput={(event: ControlEvent) => update("lockedMessage", readValue(event))}
             />
 
             <s-text-field
               label="Unlocked message"
-              details="Shown once they qualify for at least one free unit."
+              details="Shown once they qualify for at least one free unit. Same tokens as above."
               value={draft.unlockedMessage}
               onInput={(event: ControlEvent) => update("unlockedMessage", readValue(event))}
+            />
+
+            <s-text-field
+              label="Product added message"
+              details="Shown once the free gift is actually in their cart. Same tokens as above."
+              value={draft.addedMessage}
+              onInput={(event: ControlEvent) => update("addedMessage", readValue(event))}
             />
 
             <s-text-field
@@ -1428,7 +1462,7 @@ function TierListSection({ initial }: { initial: TierListSettings }) {
 
             <s-text-field
               label="Row template"
-              details="Repeated once per tier. Tokens: {quantity} (that tier's threshold), {discount} (its %/amount)."
+              details="Repeated once per tier. Tokens: {{quantity}} (that tier's threshold), {{discount}} (its %/amount)."
               value={draft.rowTemplate}
               onInput={(event: ControlEvent) => update("rowTemplate", readValue(event))}
             />
@@ -1774,7 +1808,21 @@ function CountdownTimerSection({ initial, shopTimezone }: { initial: CountdownTi
                 value={draft.digitTextColor}
                 onInput={(event: ControlEvent) => update("digitTextColor", readValue(event))}
               />
+              <s-color-field
+                label="Label color"
+                value={draft.labelColor}
+                onInput={(event: ControlEvent) => update("labelColor", readValue(event))}
+              />
             </s-grid>
+
+            <s-checkbox
+              label="Show Days/Hrs/Min/Sec labels"
+              checked={draft.showLabels}
+              onChange={(event: { target: EventTarget | null }) => {
+                const target = event.target as { checked?: boolean } | null;
+                update("showLabels", Boolean(target?.checked));
+              }}
+            />
 
             <PixelPair
               label="Font size"
@@ -1784,6 +1832,26 @@ function CountdownTimerSection({ initial, shopTimezone }: { initial: CountdownTi
               max={48}
               onChange={(v) => update("messageFontSize", v)}
               onMobileChange={(v) => update("mobileMessageFontSize", v)}
+            />
+
+            <PixelPair
+              label="Digit box roundness"
+              mobileLabel="Mobile digit box roundness"
+              value={draft.digitRadius}
+              mobileValue={draft.mobileDigitRadius}
+              max={999}
+              onChange={(v) => update("digitRadius", v)}
+              onMobileChange={(v) => update("mobileDigitRadius", v)}
+            />
+
+            <PixelPair
+              label="Gap between digits"
+              mobileLabel="Mobile gap between digits"
+              value={draft.digitGap}
+              mobileValue={draft.mobileDigitGap}
+              max={64}
+              onChange={(v) => update("digitGap", v)}
+              onMobileChange={(v) => update("mobileDigitGap", v)}
             />
 
             <PixelPair
@@ -1862,24 +1930,34 @@ function CountdownTimerSection({ initial, shopTimezone }: { initial: CountdownTi
   );
 }
 
-function AbTestingSection() {
+function AbTestingSection({ shop }: { shop: string }) {
   return (
     <s-section heading="A/B testing">
       <s-stack direction="block" gap="base">
         <s-paragraph>
-          Splitting shoppers between two campaign variants needs one small, invisible script — it doesn&apos;t show
-          anything itself, it just decides which variant each shopper sees and remembers it for their cart.
+          Splitting shoppers between two campaign variants needs one small, invisible piece running on your
+          storefront — it doesn&apos;t show anything itself, it just decides which variant each shopper sees and
+          remembers it for their cart. Unlike the other widgets, this one&apos;s a Theme Editor toggle, not a
+          copy-paste snippet — it has no visual output, so there&apos;s no positioning to get wrong.
         </s-paragraph>
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
+            <s-stack direction="block" gap="small-400">
+              <s-text type="strong">Turn it on</s-text>
+              <s-text color="subdued">Theme Editor → App embeds → enable &quot;Winslet — A/B testing&quot;.</s-text>
+            </s-stack>
+            <s-button variant="primary" href={`https://${shop}/admin/themes/current/editor?context=apps`} target="_blank">
+              Open Theme Editor
+            </s-button>
+          </s-stack>
+        </s-box>
 
         <s-banner tone="info">
           Start and manage a test from a campaign&apos;s own <s-text type="strong">A/B Test</s-text> tab.{" "}
           <s-link href="/app/campaigns">Go to Campaigns</s-link>
         </s-banner>
-
-        <AddToStoreCallout modalId="ab-test-snippet-modal" />
       </s-stack>
-
-      <SnippetModal id="ab-test-snippet-modal" heading="A/B testing — snippet code" loaderFile="ab-test-bootstrap.js" placements={[]} />
     </s-section>
   );
 }
@@ -1945,15 +2023,15 @@ function WidgetCard({
 }
 
 export default function StorefrontWidgets() {
-  const { freeShippingBar, bogoGift, announcementBar, orderDiscountBar, tierProgressBar, tierList, countdownTimer, shopTimezone } =
+  const { freeShippingBar, bogoGift, announcementBar, orderDiscountBar, tierProgressBar, tierList, countdownTimer, shopTimezone, shop } =
     useLoaderData<typeof loader>();
   const [selected, setSelected] = useState<WidgetKey | null>(null);
 
   if (selected === "freeShippingBar") {
     return (
-      <s-page heading="Storefront" inlineSize="small">
+      <s-page heading="Widgets" inlineSize="small">
         <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
-          Storefront
+          Widgets
         </s-button>
         <FreeShippingBarSection initial={freeShippingBar} />
       </s-page>
@@ -1962,9 +2040,9 @@ export default function StorefrontWidgets() {
 
   if (selected === "bogoGift") {
     return (
-      <s-page heading="Storefront" inlineSize="small">
+      <s-page heading="Widgets" inlineSize="small">
         <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
-          Storefront
+          Widgets
         </s-button>
         <BogoGiftSection initial={bogoGift} />
       </s-page>
@@ -1973,9 +2051,9 @@ export default function StorefrontWidgets() {
 
   if (selected === "announcementBar") {
     return (
-      <s-page heading="Storefront" inlineSize="small">
+      <s-page heading="Widgets" inlineSize="small">
         <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
-          Storefront
+          Widgets
         </s-button>
         <AnnouncementBarSection initial={announcementBar} />
       </s-page>
@@ -1984,9 +2062,9 @@ export default function StorefrontWidgets() {
 
   if (selected === "orderDiscountBar") {
     return (
-      <s-page heading="Storefront" inlineSize="small">
+      <s-page heading="Widgets" inlineSize="small">
         <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
-          Storefront
+          Widgets
         </s-button>
         <OrderDiscountBarSection initial={orderDiscountBar} />
       </s-page>
@@ -1995,9 +2073,9 @@ export default function StorefrontWidgets() {
 
   if (selected === "tierProgressBar") {
     return (
-      <s-page heading="Storefront" inlineSize="small">
+      <s-page heading="Widgets" inlineSize="small">
         <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
-          Storefront
+          Widgets
         </s-button>
         <TierProgressBarSection initial={tierProgressBar} />
       </s-page>
@@ -2006,9 +2084,9 @@ export default function StorefrontWidgets() {
 
   if (selected === "tierList") {
     return (
-      <s-page heading="Storefront" inlineSize="small">
+      <s-page heading="Widgets" inlineSize="small">
         <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
-          Storefront
+          Widgets
         </s-button>
         <TierListSection initial={tierList} />
       </s-page>
@@ -2017,9 +2095,9 @@ export default function StorefrontWidgets() {
 
   if (selected === "countdownTimer") {
     return (
-      <s-page heading="Storefront" inlineSize="small">
+      <s-page heading="Widgets" inlineSize="small">
         <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
-          Storefront
+          Widgets
         </s-button>
         <CountdownTimerSection initial={countdownTimer} shopTimezone={shopTimezone} />
       </s-page>
@@ -2028,18 +2106,18 @@ export default function StorefrontWidgets() {
 
   if (selected === "abTesting") {
     return (
-      <s-page heading="Storefront" inlineSize="small">
+      <s-page heading="Widgets" inlineSize="small">
         <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
-          Storefront
+          Widgets
         </s-button>
-        <AbTestingSection />
+        <AbTestingSection shop={shop} />
       </s-page>
     );
   }
 
   return (
-    <s-page heading="Storefront" inlineSize="small">
-      <s-section heading="Widgets">
+    <s-page heading="Widgets" inlineSize="small">
+      <s-section>
         <s-stack direction="block" gap="base">
           <s-paragraph>Pick a widget to style it and grab its copy-paste snippet.</s-paragraph>
 

@@ -38,13 +38,15 @@
       TAG +
       " .winslet-ctd__message{margin:0;font-size:var(--winslet-ctd-font-size);text-align:center;}" +
       TAG +
-      " .winslet-ctd__digits{display:flex;gap:8px;}" +
+      " .winslet-ctd__digits{display:flex;gap:var(--winslet-ctd-digit-gap);}" +
       TAG +
-      " .winslet-ctd__unit{display:flex;flex-direction:column;align-items:center;min-width:48px;padding:6px 8px;border-radius:6px;background:var(--winslet-ctd-digit-bg);color:var(--winslet-ctd-digit-text);}" +
+      " .winslet-ctd__unit{display:flex;flex-direction:column;align-items:center;min-width:48px;padding:6px 8px;border-radius:var(--winslet-ctd-digit-radius);background:var(--winslet-ctd-digit-bg);color:var(--winslet-ctd-digit-text);}" +
       TAG +
       " .winslet-ctd__value{font-size:calc(var(--winslet-ctd-font-size) + 8px);font-weight:700;line-height:1.2;}" +
       TAG +
-      " .winslet-ctd__label{font-size:calc(var(--winslet-ctd-font-size) - 3px);opacity:0.75;text-transform:uppercase;letter-spacing:0.04em;}" +
+      " .winslet-ctd__label{font-size:calc(var(--winslet-ctd-font-size) - 3px);color:var(--winslet-ctd-label-text);opacity:0.75;text-transform:uppercase;letter-spacing:0.04em;}" +
+      TAG +
+      " .winslet-ctd__label[hidden]{display:none;}" +
       TAG +
       " .winslet-ctd__expired{margin:0;font-size:var(--winslet-ctd-font-size);text-align:center;}" +
       "@media (max-width:" +
@@ -52,6 +54,10 @@
       "px){" +
       TAG +
       "{gap:6px;padding:var(--winslet-ctd-mobile-padding-top) var(--winslet-ctd-mobile-padding-right) var(--winslet-ctd-mobile-padding-bottom) var(--winslet-ctd-mobile-padding-left);}" +
+      TAG +
+      " .winslet-ctd__digits{gap:var(--winslet-ctd-mobile-digit-gap);}" +
+      TAG +
+      " .winslet-ctd__unit{border-radius:var(--winslet-ctd-mobile-digit-radius);}" +
       TAG +
       " .winslet-ctd__message,.winslet-ctd__expired{font-size:var(--winslet-ctd-mobile-font-size);}" +
       TAG +
@@ -170,6 +176,7 @@
         minutes: this.querySelector('[data-unit="minutes"] .winslet-ctd__value'),
         seconds: this.querySelector('[data-unit="seconds"] .winslet-ctd__value'),
       };
+      this.labelEls = this.querySelectorAll(".winslet-ctd__label");
     }
 
     watchForMorph() {
@@ -209,6 +216,12 @@
       this.style.setProperty("--winslet-ctd-text", config.textColor);
       this.style.setProperty("--winslet-ctd-digit-bg", config.digitBackgroundColor);
       this.style.setProperty("--winslet-ctd-digit-text", config.digitTextColor);
+      this.style.setProperty("--winslet-ctd-label-text", config.labelColor);
+      this.style.setProperty("--winslet-ctd-digit-radius", config.digitRadius + "px");
+      this.style.setProperty("--winslet-ctd-mobile-digit-radius", config.mobileDigitRadius + "px");
+      this.style.setProperty("--winslet-ctd-digit-gap", config.digitGap + "px");
+      this.style.setProperty("--winslet-ctd-mobile-digit-gap", config.mobileDigitGap + "px");
+      for (var i = 0; i < this.labelEls.length; i++) this.labelEls[i].hidden = !config.showLabels;
       this.style.setProperty("--winslet-ctd-font-size", config.messageFontSize + "px");
       this.style.setProperty("--winslet-ctd-mobile-font-size", config.mobileMessageFontSize + "px");
       this.style.setProperty("--winslet-ctd-padding-top", config.paddingTop + "px");

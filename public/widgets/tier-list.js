@@ -58,8 +58,20 @@
     return tierMetric === "cart.quantity" ? String(tier.minValue) : tier.minValue.toFixed(2);
   }
 
+  // "{{token_name}}", double-curly snake_case — matches this
+  // developer's own bundle-upsells app's template convention. An
+  // unknown token is left untouched rather than silently deleted.
+  function resolveTemplateTokens(text, values) {
+    return text.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/g, function (match, token) {
+      return Object.prototype.hasOwnProperty.call(values, token) ? values[token] : match;
+    });
+  }
+
   function applyRowTokens(template, tier, tierMetric, currency) {
-    return template.replace(/\{quantity\}/g, formatQuantity(tier, tierMetric)).replace(/\{discount\}/g, formatDiscount(tier, currency));
+    return resolveTemplateTokens(template, {
+      quantity: formatQuantity(tier, tierMetric),
+      discount: formatDiscount(tier, currency),
+    });
   }
 
   class TierList extends HTMLElement {

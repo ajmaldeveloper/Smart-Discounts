@@ -10,7 +10,7 @@ describe("normalizeWidgetSettings", () => {
         nearColor: "#222222",
         reachedColor: "#333333",
         nearThresholdPercent: 60,
-        progressMessage: "Almost there: {remaining} left",
+        progressMessage: "Almost there: {{remaining}} left",
         completeMessage: "Free shipping unlocked",
         barThickness: 10,
         mobileBarThickness: 6,
@@ -38,7 +38,7 @@ describe("normalizeWidgetSettings", () => {
       nearColor: "#222222",
       reachedColor: "#333333",
       nearThresholdPercent: 60,
-      progressMessage: "Almost there: {remaining} left",
+      progressMessage: "Almost there: {{remaining}} left",
       completeMessage: "Free shipping unlocked",
       barThickness: 10,
       mobileBarThickness: 6,
@@ -76,7 +76,7 @@ describe("normalizeWidgetSettings", () => {
     expect(settings.freeShippingBar.nearColor).toBe("#ffc453");
     expect(settings.freeShippingBar.reachedColor).toBe("#008060");
     expect(settings.freeShippingBar.nearThresholdPercent).toBe(100);
-    expect(settings.freeShippingBar.progressMessage).toBe("Spend {currency_symbol}{remaining} more for free shipping!");
+    expect(settings.freeShippingBar.progressMessage).toBe("Spend {{currency_symbol}}{{remaining}} more for free shipping!");
     expect(settings.freeShippingBar.completeMessage).toBe("You've unlocked free shipping!");
     expect(settings.freeShippingBar.barThickness).toBe(0);
     expect(settings.freeShippingBar.mobileBarRoundness).toBe(999);
@@ -125,10 +125,11 @@ describe("normalizeWidgetSettings", () => {
         trackColor: "#aaaaaa",
         progressColor: "#bbbbbb",
         unlockedColor: "#cccccc",
-        lockedMessage: "Add {remaining} more!",
+        lockedMessage: "Add {{remaining}} more!",
         unlockedMessage: "Ready!",
         addButtonColor: "#dddddd",
         addButtonTextColor: "#eeeeee",
+        addedMessage: "Gift added!",
         addButtonLabel: "Claim gift",
         barThickness: 12,
         barPosition: "bottom",
@@ -138,8 +139,9 @@ describe("normalizeWidgetSettings", () => {
     expect(settings.bogoGift.trackColor).toBe("#aaaaaa");
     expect(settings.bogoGift.progressColor).toBe("#bbbbbb");
     expect(settings.bogoGift.unlockedColor).toBe("#cccccc");
-    expect(settings.bogoGift.lockedMessage).toBe("Add {remaining} more!");
+    expect(settings.bogoGift.lockedMessage).toBe("Add {{remaining}} more!");
     expect(settings.bogoGift.unlockedMessage).toBe("Ready!");
+    expect(settings.bogoGift.addedMessage).toBe("Gift added!");
     expect(settings.bogoGift.addButtonColor).toBe("#dddddd");
     expect(settings.bogoGift.addButtonTextColor).toBe("#eeeeee");
     expect(settings.bogoGift.addButtonLabel).toBe("Claim gift");
@@ -157,7 +159,8 @@ describe("normalizeWidgetSettings", () => {
     expect(settings.bogoGift.trackColor).toBe("#f1f2f3");
     expect(settings.bogoGift.progressColor).toBe("#8c9196");
     expect(settings.bogoGift.unlockedColor).toBe("#008060");
-    expect(settings.bogoGift.lockedMessage).toBe("Add {remaining} more to unlock a free gift!");
+    expect(settings.bogoGift.lockedMessage).toBe("Add {{remaining}} more to unlock a free gift!");
+    expect(settings.bogoGift.addedMessage).toBe("Your free gift has been added to your cart!");
     expect(settings.bogoGift.addButtonColor).toBe("#008060");
     expect(settings.bogoGift.addButtonTextColor).toBe("#ffffff");
     expect(settings.bogoGift.addButtonLabel).toBe("Add");
@@ -175,8 +178,8 @@ describe("normalizeWidgetSettings — orderDiscountBar", () => {
         nearColor: "#cccccc",
         reachedColor: "#dddddd",
         nearThresholdPercent: 60,
-        progressMessage: "Spend more for {discount} off!",
-        completeMessage: "{discount} off unlocked!",
+        progressMessage: "Spend more for {{discount}} off!",
+        completeMessage: "{{discount}} off unlocked!",
         barThickness: 12,
         barPosition: "bottom",
       },
@@ -187,8 +190,8 @@ describe("normalizeWidgetSettings — orderDiscountBar", () => {
     expect(settings.orderDiscountBar.nearColor).toBe("#cccccc");
     expect(settings.orderDiscountBar.reachedColor).toBe("#dddddd");
     expect(settings.orderDiscountBar.nearThresholdPercent).toBe(60);
-    expect(settings.orderDiscountBar.progressMessage).toBe("Spend more for {discount} off!");
-    expect(settings.orderDiscountBar.completeMessage).toBe("{discount} off unlocked!");
+    expect(settings.orderDiscountBar.progressMessage).toBe("Spend more for {{discount}} off!");
+    expect(settings.orderDiscountBar.completeMessage).toBe("{{discount}} off unlocked!");
     expect(settings.orderDiscountBar.barThickness).toBe(12);
     expect(settings.orderDiscountBar.barPosition).toBe("bottom");
   });
@@ -288,8 +291,8 @@ describe("normalizeWidgetSettings — tierProgressBar", () => {
         trackColor: "#111111",
         progressColor: "#222222",
         reachedColor: "#333333",
-        messageTemplate: "Add {remaining} for {discount}!",
-        completeMessage: "{discount} unlocked!",
+        messageTemplate: "Add {{remaining}} for {{discount}}!",
+        completeMessage: "{{discount}} unlocked!",
         barThickness: 12,
         barPosition: "bottom",
       },
@@ -298,8 +301,8 @@ describe("normalizeWidgetSettings — tierProgressBar", () => {
     expect(settings.tierProgressBar.trackColor).toBe("#111111");
     expect(settings.tierProgressBar.progressColor).toBe("#222222");
     expect(settings.tierProgressBar.reachedColor).toBe("#333333");
-    expect(settings.tierProgressBar.messageTemplate).toBe("Add {remaining} for {discount}!");
-    expect(settings.tierProgressBar.completeMessage).toBe("{discount} unlocked!");
+    expect(settings.tierProgressBar.messageTemplate).toBe("Add {{remaining}} for {{discount}}!");
+    expect(settings.tierProgressBar.completeMessage).toBe("{{discount}} unlocked!");
     expect(settings.tierProgressBar.barThickness).toBe(12);
     expect(settings.tierProgressBar.barPosition).toBe("bottom");
   });
@@ -320,7 +323,7 @@ describe("normalizeWidgetSettings — tierList", () => {
       tierList: {
         heading: "Volume savings",
         triggerLabel: "View tiers",
-        rowTemplate: "{quantity}+, {discount}",
+        rowTemplate: "{{quantity}}+, {{discount}}",
         backgroundColor: "#111111",
         textColor: "#222222",
         accentColor: "#333333",
@@ -340,7 +343,7 @@ describe("normalizeWidgetSettings — tierList", () => {
     expect(settings.tierList).toEqual({
       heading: "Volume savings",
       triggerLabel: "View tiers",
-      rowTemplate: "{quantity}+, {discount}",
+      rowTemplate: "{{quantity}}+, {{discount}}",
       backgroundColor: "#111111",
       textColor: "#222222",
       accentColor: "#333333",
@@ -362,7 +365,7 @@ describe("normalizeWidgetSettings — tierList", () => {
 
     expect(settings.tierList.heading).toBe("Bulk discounts");
     expect(settings.tierList.triggerLabel).toBe("See bulk pricing");
-    expect(settings.tierList.rowTemplate).toBe("Buy {quantity}+, save {discount}");
+    expect(settings.tierList.rowTemplate).toBe("Buy {{quantity}}+, save {{discount}}");
     expect(settings.tierList.backgroundColor).toBe("#ffffff");
   });
 });
@@ -433,6 +436,26 @@ describe("normalizeWidgetSettings — countdownTimer", () => {
     expect(normalizeWidgetSettings({ countdownTimer: { repeatHours: 999999 } }).countdownTimer.repeatHours).toBe(8760);
   });
 
+  it("normalizes labelColor/showLabels/digitRadius/digitGap", () => {
+    const settings = normalizeWidgetSettings({
+      countdownTimer: {
+        labelColor: "#123456",
+        showLabels: false,
+        digitRadius: 12,
+        mobileDigitRadius: 10,
+        digitGap: 20,
+        mobileDigitGap: 16,
+      },
+    });
+
+    expect(settings.countdownTimer.labelColor).toBe("#123456");
+    expect(settings.countdownTimer.showLabels).toBe(false);
+    expect(settings.countdownTimer.digitRadius).toBe(12);
+    expect(settings.countdownTimer.mobileDigitRadius).toBe(10);
+    expect(settings.countdownTimer.digitGap).toBe(20);
+    expect(settings.countdownTimer.mobileDigitGap).toBe(16);
+  });
+
   it("returns defaults for a missing/malformed value, without disturbing other widgets", () => {
     const settings = normalizeWidgetSettings({
       freeShippingBar: { startColor: "#123123" },
@@ -445,5 +468,9 @@ describe("normalizeWidgetSettings — countdownTimer", () => {
     expect(settings.countdownTimer.dailyResetTime).toBe("00:00");
     expect(settings.countdownTimer.repeatHours).toBe(24);
     expect(settings.countdownTimer.backgroundColor).toBe("#1a1a1a");
+    expect(settings.countdownTimer.labelColor).toBe("#ffffff");
+    expect(settings.countdownTimer.showLabels).toBe(true);
+    expect(settings.countdownTimer.digitRadius).toBe(6);
+    expect(settings.countdownTimer.digitGap).toBe(8);
   });
 });
