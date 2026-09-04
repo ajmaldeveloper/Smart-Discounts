@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import db from "../db.server";
-import { getActiveBogoGiftCampaign, getActiveFreeShippingThreshold } from "./storefront-widgets.server";
+import { getActiveBogoGiftCampaign, getActiveFreeShippingThreshold, getActiveOrderDiscountThreshold } from "./storefront-widgets.server";
 
 afterEach(async () => {
   await db.shop.deleteMany({ where: { domain: { startsWith: "storefront-widgets-test-" } } });
@@ -163,5 +163,72 @@ describe("getActiveBogoGiftCampaign", () => {
     });
 
     expect(await getActiveBogoGiftCampaign(shop.id)).toEqual({ active: false });
+  });
+});
+
+describe("getActiveOrderDiscountThreshold", () => {
+  it("returns inactive when the shop has no campaigns at all", async () => {
+    const shop = await makeShop();
+    expect(await getActiveOrderDiscountThreshold(shop.id)).toEqual({ active: false });
+  });
+
+  it("returns the threshold and discount value from an ACTIVE campaign's order reward", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: { order: { value: { type: "percentage", value: 15 }, minimumMetric: "cart.subtotal", minimumValue: 100 } },
+    });
+
+    expect(await getActiveOrderDiscountThreshold(shop.id)).toEqual({
+      active: true,
+      minimumValue: 100,
+      minimumMetric: "cart.subtotal",
+      discountValue: { type: "percentage", value: 15 },
+    });
+  });
+
+  it("ignores a PAUSED campaign even with a qualifying order reward", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "PAUSED",
+      rewardJson: { order: { value: { type: "percentage", value: 15 }, minimumValue: 100 } },
+    });
+
+    expect(await getActiveOrderDiscountThreshold(shop.id)).toEqual({ active: false });
+  });
+
+  it("ignores an ACTIVE campaign with no order reward at all", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: { shipping: { value: { type: "percentage", value: 100 }, minimumValue: 50 } },
+    });
+
+    expect(await getActiveOrderDiscountThreshold(shop.id)).toEqual({ active: false });
+  });
+
+  it("ignores an ACTIVE campaign whose order reward has no minimumValue set", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: { order: { value: { type: "fixedAmount", value: 10 } } },
+    });
+
+    expect(await getActiveOrderDiscountThreshold(shop.id)).toEqual({ active: false });
+  });
+
+  it("defaults minimumMetric to cart.quantity when unset on the reward", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: { order: { value: { type: "fixedAmount", value: 10 }, minimumValue: 3 } },
+    });
+
+    expect(await getActiveOrderDiscountThreshold(shop.id)).toEqual({
+      active: true,
+      minimumValue: 3,
+      minimumMetric: "cart.quantity",
+      discountValue: { type: "fixedAmount", value: 10 },
+    });
   });
 });

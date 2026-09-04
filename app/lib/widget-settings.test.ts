@@ -166,6 +166,49 @@ describe("normalizeWidgetSettings", () => {
   });
 });
 
+describe("normalizeWidgetSettings — orderDiscountBar", () => {
+  it("normalizes a full valid orderDiscountBar config, independent of the other widgets", () => {
+    const settings = normalizeWidgetSettings({
+      orderDiscountBar: {
+        trackColor: "#aaaaaa",
+        startColor: "#bbbbbb",
+        nearColor: "#cccccc",
+        reachedColor: "#dddddd",
+        nearThresholdPercent: 60,
+        progressMessage: "Spend more for {discount} off!",
+        completeMessage: "{discount} off unlocked!",
+        barThickness: 12,
+        barPosition: "bottom",
+      },
+    });
+
+    expect(settings.orderDiscountBar.trackColor).toBe("#aaaaaa");
+    expect(settings.orderDiscountBar.startColor).toBe("#bbbbbb");
+    expect(settings.orderDiscountBar.nearColor).toBe("#cccccc");
+    expect(settings.orderDiscountBar.reachedColor).toBe("#dddddd");
+    expect(settings.orderDiscountBar.nearThresholdPercent).toBe(60);
+    expect(settings.orderDiscountBar.progressMessage).toBe("Spend more for {discount} off!");
+    expect(settings.orderDiscountBar.completeMessage).toBe("{discount} off unlocked!");
+    expect(settings.orderDiscountBar.barThickness).toBe(12);
+    expect(settings.orderDiscountBar.barPosition).toBe("bottom");
+  });
+
+  it("returns orderDiscountBar defaults for a missing/malformed value, without disturbing freeShippingBar", () => {
+    const settings = normalizeWidgetSettings({
+      freeShippingBar: { startColor: "#123123" },
+      orderDiscountBar: "garbage",
+    });
+
+    expect(settings.freeShippingBar.startColor).toBe("#123123");
+    expect(settings.orderDiscountBar.trackColor).toBe("#f1f2f3");
+    expect(settings.orderDiscountBar.startColor).toBe("#8c9196");
+    expect(settings.orderDiscountBar.nearColor).toBe("#ffc453");
+    expect(settings.orderDiscountBar.reachedColor).toBe("#008060");
+    expect(settings.orderDiscountBar.nearThresholdPercent).toBe(75);
+    expect(settings.orderDiscountBar.barPosition).toBe("top");
+  });
+});
+
 describe("normalizeWidgetSettings — announcementBar", () => {
   it("normalizes a full valid announcementBar config", () => {
     const settings = normalizeWidgetSettings({

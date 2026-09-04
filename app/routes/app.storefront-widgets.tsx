@@ -12,6 +12,7 @@ import {
   type BarSizingSettings,
   type BogoGiftSettings,
   type FreeShippingBarSettings,
+  type OrderDiscountBarSettings,
 } from "../lib/widget-settings";
 
 type ActionData = { error?: string; notice?: string };
@@ -156,14 +157,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shop = await db.shop.findUnique({ where: { domain: session.shop } });
   const settings = normalizeWidgetSettings(shop?.widgetSettingsJson);
 
-  return { freeShippingBar: settings.freeShippingBar, bogoGift: settings.bogoGift, announcementBar: settings.announcementBar };
+  return {
+    freeShippingBar: settings.freeShippingBar,
+    bogoGift: settings.bogoGift,
+    announcementBar: settings.announcementBar,
+    orderDiscountBar: settings.orderDiscountBar,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const widgetKeyRaw = formData.get("widgetKey");
-  const widgetKey = widgetKeyRaw === "bogoGift" ? "bogoGift" : widgetKeyRaw === "announcementBar" ? "announcementBar" : "freeShippingBar";
+  const widgetKey =
+    widgetKeyRaw === "bogoGift"
+      ? "bogoGift"
+      : widgetKeyRaw === "announcementBar"
+        ? "announcementBar"
+        : widgetKeyRaw === "orderDiscountBar"
+          ? "orderDiscountBar"
+          : "freeShippingBar";
 
   const shop = await db.shop.findUnique({ where: { domain: session.shop } });
   const current = normalizeWidgetSettings(shop?.widgetSettingsJson);
@@ -252,6 +265,46 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.shop.update({
       where: { domain: session.shop },
       data: { widgetSettingsJson: { ...current, freeShippingBar } as unknown as object },
+    });
+  } else if (widgetKey === "orderDiscountBar") {
+    const trackColor = String(formData.get("trackColor") ?? "").trim();
+    const startColor = String(formData.get("startColor") ?? "").trim();
+    const nearColor = String(formData.get("nearColor") ?? "").trim();
+    const reachedColor = String(formData.get("reachedColor") ?? "").trim();
+    const nearThresholdPercentRaw = String(formData.get("nearThresholdPercent") ?? "").trim();
+    const progressMessage = String(formData.get("progressMessage") ?? "").trim();
+    const completeMessage = String(formData.get("completeMessage") ?? "").trim();
+
+    for (const [label, value] of [
+      ["Background", trackColor],
+      ["Starting", startColor],
+      ["Nearly-reached", nearColor],
+      ["Reached", reachedColor],
+    ] as const) {
+      if (!HEX_COLOR.test(value)) return { error: `${label} color must be a valid hex color (e.g. #008060).` } satisfies ActionData;
+    }
+
+    const nearThresholdPercent = Number(nearThresholdPercentRaw);
+    if (!Number.isFinite(nearThresholdPercent) || nearThresholdPercent < 0 || nearThresholdPercent > 100) {
+      return { error: "Nearly-reached breakpoint must be a percent between 0 and 100." } satisfies ActionData;
+    }
+    if (!progressMessage) return { error: "Enter a progress message." } satisfies ActionData;
+    if (!completeMessage) return { error: "Enter a complete message." } satisfies ActionData;
+
+    const orderDiscountBar: OrderDiscountBarSettings = {
+      ...sizing,
+      trackColor,
+      startColor,
+      nearColor,
+      reachedColor,
+      nearThresholdPercent,
+      progressMessage,
+      completeMessage,
+    };
+
+    await db.shop.update({
+      where: { domain: session.shop },
+      data: { widgetSettingsJson: { ...current, orderDiscountBar } as unknown as object },
     });
   } else {
     const trackColor = String(formData.get("trackColor") ?? "").trim();
@@ -631,6 +684,129 @@ function FreeShippingBarSection({ initial }: { initial: FreeShippingBarSettings 
   );
 }
 
+function OrderDiscountBarSection({ initial }: { initial: OrderDiscountBarSettings }) {
+  const actionData = useActionData() as ActionData | undefined;
+  const navigation = useNavigation();
+  const submit = useSubmit();
+  const shopify = useAppBridge();
+
+  const [draft, setDraft] = useState<OrderDiscountBarSettings>(initial);
+  const update = <K extends keyof OrderDiscountBarSettings>(key: K, value: OrderDiscountBarSettings[K]) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const pending = navigation.state !== "idle" && navigation.formData?.get("widgetKey") === "orderDiscountBar";
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(initial);
+
+  useEffect(() => {
+    if (!actionData || pending) return;
+    if (actionData.error) shopify.toast.show(actionData.error, { isError: true });
+    else if (actionData.notice) shopify.toast.show(actionData.notice, { duration: 2400 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionData]);
+
+  return (
+    <s-section heading="Order discount bar">
+      <s-stack direction="block" gap="base">
+        <s-paragraph>
+          Shows live progress toward whichever active campaign gives a percent/fixed-amount discount on the whole order —
+          always in sync with the real discount, no manual re-entry.
+        </s-paragraph>
+
+        <AddToStoreCallout modalId="order-discount-snippet-modal" />
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Content</s-text>
+
+            <s-number-field
+              label="Switch to nearly-reached color at (% of threshold)"
+              min={0}
+              max={100}
+              suffix="%"
+              value={String(draft.nearThresholdPercent)}
+              onInput={(event: ControlEvent) => update("nearThresholdPercent", Number(readValue(event)) || 0)}
+            />
+
+            <s-text-field
+              label="Progress message"
+              details="Shown below the threshold. Tokens: {remaining} (bare number), {currency_symbol} (e.g. $), {currency_code} (e.g. USD), {discount} (e.g. 15% or $10)."
+              value={draft.progressMessage}
+              onInput={(event: ControlEvent) => update("progressMessage", readValue(event))}
+            />
+
+            <s-text-field
+              label="Complete message"
+              details="Shown once the threshold is met. Same tokens as above."
+              value={draft.completeMessage}
+              onInput={(event: ControlEvent) => update("completeMessage", readValue(event))}
+            />
+          </s-stack>
+        </s-box>
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Style</s-text>
+
+            <s-grid gridTemplateColumns="repeat(2, minmax(160px, 1fr))" gap="base">
+              <s-color-field
+                label="Background color"
+                value={draft.trackColor}
+                onInput={(event: ControlEvent) => update("trackColor", readValue(event))}
+              />
+              <s-color-field
+                label="Starting color"
+                value={draft.startColor}
+                onInput={(event: ControlEvent) => update("startColor", readValue(event))}
+              />
+              <s-color-field
+                label="Nearly-reached color"
+                value={draft.nearColor}
+                onInput={(event: ControlEvent) => update("nearColor", readValue(event))}
+              />
+              <s-color-field
+                label="Reached color"
+                value={draft.reachedColor}
+                onInput={(event: ControlEvent) => update("reachedColor", readValue(event))}
+              />
+            </s-grid>
+
+            <BarSizingFields draft={draft} update={update} />
+          </s-stack>
+        </s-box>
+
+        <s-stack direction="inline" justifyContent="end">
+          <s-button
+            variant="primary"
+            loading={pending}
+            disabled={pending || !isDirty}
+            onClick={() => {
+              const data = new FormData();
+              data.set("widgetKey", "orderDiscountBar");
+              for (const [key, value] of Object.entries(draft)) data.set(key, String(value));
+              submit(data, { method: "post" });
+            }}
+          >
+            Save
+          </s-button>
+        </s-stack>
+      </s-stack>
+
+      <SnippetModal
+        id="order-discount-snippet-modal"
+        heading="Order discount bar — snippet code"
+        loaderFile="order-discount-bar.js"
+        placements={[
+          {
+            tag: "winslet-order-discount-bar",
+            title: "Paste wherever you want it to show",
+            description: "Cart drawer, cart page, anywhere — paste it as many times as you like.",
+          },
+        ]}
+      />
+    </s-section>
+  );
+}
+
 function BogoGiftSection({ initial }: { initial: BogoGiftSettings }) {
   const actionData = useActionData() as ActionData | undefined;
   const navigation = useNavigation();
@@ -928,7 +1104,7 @@ function AnnouncementBarSection({ initial }: { initial: AnnouncementBarSettings 
   );
 }
 
-type WidgetKey = "freeShippingBar" | "bogoGift" | "announcementBar";
+type WidgetKey = "freeShippingBar" | "bogoGift" | "announcementBar" | "orderDiscountBar";
 
 function WidgetCard({
   icon,
@@ -938,7 +1114,7 @@ function WidgetCard({
   onClick,
   disabled,
 }: {
-  icon: "cart-discount" | "gift-card" | "megaphone";
+  icon: "cart-discount" | "gift-card" | "megaphone" | "discount";
   iconBackground: string;
   title: string;
   description: string;
@@ -981,7 +1157,7 @@ function WidgetCard({
 }
 
 export default function StorefrontWidgets() {
-  const { freeShippingBar, bogoGift, announcementBar } = useLoaderData<typeof loader>();
+  const { freeShippingBar, bogoGift, announcementBar, orderDiscountBar } = useLoaderData<typeof loader>();
   const [selected, setSelected] = useState<WidgetKey | null>(null);
 
   if (selected === "freeShippingBar") {
@@ -1017,6 +1193,17 @@ export default function StorefrontWidgets() {
     );
   }
 
+  if (selected === "orderDiscountBar") {
+    return (
+      <s-page heading="Storefront" inlineSize="small">
+        <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
+          Storefront
+        </s-button>
+        <OrderDiscountBarSection initial={orderDiscountBar} />
+      </s-page>
+    );
+  }
+
   return (
     <s-page heading="Storefront" inlineSize="small">
       <s-section heading="Widgets">
@@ -1044,6 +1231,13 @@ export default function StorefrontWidgets() {
               title="Announcement bar"
               description="A static banner with your own message and link."
               onClick={() => setSelected("announcementBar")}
+            />
+            <WidgetCard
+              icon="discount"
+              iconBackground="#fbe6d9"
+              title="Order discount bar"
+              description="Live progress toward your order-wide percent/amount discount."
+              onClick={() => setSelected("orderDiscountBar")}
             />
           </s-grid>
         </s-stack>

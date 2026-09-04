@@ -9,7 +9,7 @@
  */
 
 import db from "../db.server";
-import { normalizeRewardConfig, type TierMetric } from "../lib/reward-types";
+import { normalizeRewardConfig, type DiscountValue, type TierMetric } from "../lib/reward-types";
 import { parseConditionTree, type ConditionGroup } from "../lib/campaign-types";
 
 export type FreeShippingThreshold =
@@ -39,6 +39,41 @@ export async function getActiveFreeShippingThreshold(shopId: string): Promise<Fr
       // (defaulting to "cart.quantity") whenever minimumValue is present —
       // this fallback is just for type-safety, never actually hit.
       return { active: true, minimumValue: shipping.minimumValue, minimumMetric: shipping.minimumMetric ?? "cart.quantity" };
+    }
+  }
+
+  return { active: false };
+}
+
+export type OrderDiscountThreshold =
+  | { active: true; minimumValue: number; minimumMetric: TierMetric; discountValue: DiscountValue }
+  | { active: false };
+
+/**
+ * The order-discount bar's threshold: the first ACTIVE campaign whose
+ * Order reward sets minimumValue — same "flat gate" shape as
+ * ShippingReward, ignoring `tiers` (a multi-breakpoint order discount
+ * is the separate tier-progress widget's job, not this one). Also
+ * surfaces the reward's own DiscountValue so the bar's message can
+ * show the actual %/amount the shopper unlocks, e.g. "Spend $20 more
+ * for 15% off!".
+ */
+export async function getActiveOrderDiscountThreshold(shopId: string): Promise<OrderDiscountThreshold> {
+  const campaigns = await db.campaign.findMany({
+    where: { shopId, status: "ACTIVE" },
+    select: { rewardJson: true },
+  });
+
+  for (const campaign of campaigns) {
+    const reward = normalizeRewardConfig(campaign.rewardJson);
+    const order = reward.order;
+    if (order?.minimumValue !== undefined) {
+      return {
+        active: true,
+        minimumValue: order.minimumValue,
+        minimumMetric: order.minimumMetric ?? "cart.quantity",
+        discountValue: order.value,
+      };
     }
   }
 

@@ -87,6 +87,26 @@ export interface FreeShippingBarSettings extends BarSizingSettings {
 }
 
 /**
+ * The order-discount progress bar — same three-stage shape as
+ * FreeShippingBarSettings (start/near/reached), just tracking an
+ * active campaign's Order reward (a %/fixed-amount discount on the
+ * whole order) instead of free shipping. progressMessage/
+ * completeMessage additionally support a "{discount}" token (e.g.
+ * "15%" or "$10"), substituted client-side from the reward's own
+ * value/type — never stored here, so it can never drift from the real
+ * discount.
+ */
+export interface OrderDiscountBarSettings extends BarSizingSettings {
+  trackColor: string;
+  startColor: string;
+  nearColor: string;
+  reachedColor: string;
+  nearThresholdPercent: number;
+  progressMessage: string;
+  completeMessage: string;
+}
+
+/**
  * The "Buy X get Y free" gift-picker widget — a progress bar (same
  * concept as FreeShippingBarSettings, just two stages instead of
  * three: locked/unlocked, no "nearly there" midpoint) plus a product
@@ -145,6 +165,7 @@ export interface WidgetSettings {
   freeShippingBar: FreeShippingBarSettings;
   bogoGift: BogoGiftSettings;
   announcementBar: AnnouncementBarSettings;
+  orderDiscountBar: OrderDiscountBarSettings;
 }
 
 const DEFAULT_BAR_SIZING: BarSizingSettings = {
@@ -176,6 +197,17 @@ const DEFAULT_FREE_SHIPPING_BAR: FreeShippingBarSettings = {
   nearThresholdPercent: 75,
   progressMessage: "Spend {currency_symbol}{remaining} more for free shipping!",
   completeMessage: "You've unlocked free shipping!",
+};
+
+const DEFAULT_ORDER_DISCOUNT_BAR: OrderDiscountBarSettings = {
+  ...DEFAULT_BAR_SIZING,
+  trackColor: "#f1f2f3",
+  startColor: "#8c9196",
+  nearColor: "#ffc453",
+  reachedColor: "#008060",
+  nearThresholdPercent: 75,
+  progressMessage: "Spend {currency_symbol}{remaining} more for {discount} off your order!",
+  completeMessage: "You've unlocked {discount} off your order!",
 };
 
 const DEFAULT_BOGO_GIFT: BogoGiftSettings = {
@@ -268,11 +300,17 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
   const barRecord = recordOf(record.freeShippingBar);
   const giftRecord = recordOf(record.bogoGift);
   const announcementRecord = recordOf(record.announcementBar);
+  const orderBarRecord = recordOf(record.orderDiscountBar);
 
   const nearThresholdPercent =
     typeof barRecord.nearThresholdPercent === "number" && Number.isFinite(barRecord.nearThresholdPercent)
       ? Math.min(100, Math.max(0, barRecord.nearThresholdPercent))
       : DEFAULT_FREE_SHIPPING_BAR.nearThresholdPercent;
+
+  const orderBarNearThresholdPercent =
+    typeof orderBarRecord.nearThresholdPercent === "number" && Number.isFinite(orderBarRecord.nearThresholdPercent)
+      ? Math.min(100, Math.max(0, orderBarRecord.nearThresholdPercent))
+      : DEFAULT_ORDER_DISCOUNT_BAR.nearThresholdPercent;
 
   return {
     freeShippingBar: {
@@ -284,6 +322,16 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
       nearThresholdPercent,
       progressMessage: normalizeMessage(barRecord.progressMessage, DEFAULT_FREE_SHIPPING_BAR.progressMessage),
       completeMessage: normalizeMessage(barRecord.completeMessage, DEFAULT_FREE_SHIPPING_BAR.completeMessage),
+    },
+    orderDiscountBar: {
+      ...normalizeBarSizing(orderBarRecord, DEFAULT_ORDER_DISCOUNT_BAR),
+      trackColor: normalizeHexColor(orderBarRecord.trackColor, DEFAULT_ORDER_DISCOUNT_BAR.trackColor),
+      startColor: normalizeHexColor(orderBarRecord.startColor, DEFAULT_ORDER_DISCOUNT_BAR.startColor),
+      nearColor: normalizeHexColor(orderBarRecord.nearColor, DEFAULT_ORDER_DISCOUNT_BAR.nearColor),
+      reachedColor: normalizeHexColor(orderBarRecord.reachedColor, DEFAULT_ORDER_DISCOUNT_BAR.reachedColor),
+      nearThresholdPercent: orderBarNearThresholdPercent,
+      progressMessage: normalizeMessage(orderBarRecord.progressMessage, DEFAULT_ORDER_DISCOUNT_BAR.progressMessage),
+      completeMessage: normalizeMessage(orderBarRecord.completeMessage, DEFAULT_ORDER_DISCOUNT_BAR.completeMessage),
     },
     bogoGift: {
       ...normalizeBarSizing(giftRecord, DEFAULT_BOGO_GIFT),
