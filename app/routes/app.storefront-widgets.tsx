@@ -1862,6 +1862,28 @@ function CountdownTimerSection({ initial, shopTimezone }: { initial: CountdownTi
   );
 }
 
+function AbTestingSection() {
+  return (
+    <s-section heading="A/B testing">
+      <s-stack direction="block" gap="base">
+        <s-paragraph>
+          Splitting shoppers between two campaign variants needs one small, invisible script — it doesn&apos;t show
+          anything itself, it just decides which variant each shopper sees and remembers it for their cart.
+        </s-paragraph>
+
+        <s-banner tone="info">
+          Start and manage a test from a campaign&apos;s own <s-text type="strong">A/B Test</s-text> tab.{" "}
+          <s-link href="/app/campaigns">Go to Campaigns</s-link>
+        </s-banner>
+
+        <AddToStoreCallout modalId="ab-test-snippet-modal" />
+      </s-stack>
+
+      <SnippetModal id="ab-test-snippet-modal" heading="A/B testing — snippet code" loaderFile="ab-test-bootstrap.js" placements={[]} />
+    </s-section>
+  );
+}
+
 type WidgetKey =
   | "freeShippingBar"
   | "bogoGift"
@@ -1869,7 +1891,8 @@ type WidgetKey =
   | "orderDiscountBar"
   | "tierProgressBar"
   | "tierList"
-  | "countdownTimer";
+  | "countdownTimer"
+  | "abTesting";
 
 function WidgetCard({
   icon,
@@ -1879,7 +1902,7 @@ function WidgetCard({
   onClick,
   disabled,
 }: {
-  icon: "cart-discount" | "gift-card" | "megaphone" | "discount" | "chart-stacked" | "price-list" | "clock";
+  icon: "cart-discount" | "gift-card" | "megaphone" | "discount" | "chart-stacked" | "price-list" | "clock" | "split";
   iconBackground: string;
   title: string;
   description: string;
@@ -2003,6 +2026,17 @@ export default function StorefrontWidgets() {
     );
   }
 
+  if (selected === "abTesting") {
+    return (
+      <s-page heading="Storefront" inlineSize="small">
+        <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
+          Storefront
+        </s-button>
+        <AbTestingSection />
+      </s-page>
+    );
+  }
+
   return (
     <s-page heading="Storefront" inlineSize="small">
       <s-section heading="Widgets">
@@ -2058,6 +2092,13 @@ export default function StorefrontWidgets() {
               title="Countdown timer"
               description="A live Days:Hours:Min:Sec countdown — fixed, daily, or weekly."
               onClick={() => setSelected("countdownTimer")}
+            />
+            <WidgetCard
+              icon="split"
+              iconBackground="#e1ecf7"
+              title="A/B testing"
+              description="One invisible script that splits shoppers between two campaign variants."
+              onClick={() => setSelected("abTesting")}
             />
           </s-grid>
         </s-stack>

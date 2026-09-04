@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import crypto from "node:crypto";
 import db from "../db.server";
 import { createEmptyGroup, normalizeConditionNode } from "../lib/campaign-types";
 import { normalizeRewardConfig } from "../lib/reward-types";
@@ -45,6 +46,108 @@ export async function duplicateCampaign(shopId: string, id: string) {
       stackingJson: original.stackingJson as Prisma.InputJsonValue | undefined,
     },
   });
+}
+
+const VARIANT_SUFFIX = /\s+—\s+Variant [AB]$/;
+
+function baseExperimentName(name: string): string {
+  return name.replace(VARIANT_SUFFIX, "").trim();
+}
+
+/**
+ * Turns a campaign into "Variant A" of a new A/B test and creates an
+ * independent DRAFT "Variant B" duplicate sharing the same targeting/
+ * schedule — only its reward is meant to then be edited differently,
+ * that's the whole point of the test. A shopper's cart attribute (set
+ * by public/widgets/ab-test-bootstrap.js) decides which variant, if
+ * either, actually applies at checkout — see
+ * extensions/winslet-discounts/src/cart_lines_discounts_generate_run.ts.
+ */
+export async function startExperiment(shopId: string, id: string) {
+  const original = await getCampaign(shopId, id);
+  if (!original || original.experimentId) return null;
+
+  const experimentId = crypto.randomUUID();
+  const baseName = baseExperimentName(original.name);
+
+  const variantA = await db.campaign.update({
+    where: { id: original.id },
+    data: { name: `${baseName} — Variant A`, experimentId, experimentVariant: "A", experimentWeight: 50 },
+  });
+
+  const variantB = await db.campaign.create({
+    data: {
+      shopId,
+      name: `${baseName} — Variant B`,
+      kind: original.kind,
+      discountCode: null,
+      status: "DRAFT",
+      priority: original.priority,
+      isExclusive: original.isExclusive,
+      usageLimitTotal: original.usageLimitTotal,
+      usageLimitPerCustomer: original.usageLimitPerCustomer,
+      audienceJson: original.audienceJson as Prisma.InputJsonValue | undefined,
+      marketJson: original.marketJson as Prisma.InputJsonValue | undefined,
+      productScopeJson: original.productScopeJson as Prisma.InputJsonValue | undefined,
+      conditionsJson: original.conditionsJson as Prisma.InputJsonValue,
+      rewardJson: original.rewardJson as Prisma.InputJsonValue,
+      stackingJson: original.stackingJson as Prisma.InputJsonValue | undefined,
+      experimentId,
+      experimentVariant: "B",
+    },
+  });
+
+  return { variantA, variantB };
+}
+
+/** The other campaign sharing this one's experimentId, if any. */
+export async function getExperimentSibling(shopId: string, campaign: { id: string; experimentId: string | null }) {
+  if (!campaign.experimentId) return null;
+  return db.campaign.findFirst({ where: { shopId, experimentId: campaign.experimentId, id: { not: campaign.id } } });
+}
+
+/** Percent of traffic sent to Variant A only ever lives on the "A" row — read/write through whichever variant the merchant happens to be viewing. */
+export async function updateExperimentWeight(shopId: string, id: string, weight: number) {
+  const campaign = await getCampaign(shopId, id);
+  if (!campaign?.experimentId) return null;
+
+  const clamped = Math.max(0, Math.min(100, Math.round(weight)));
+  const variantA =
+    campaign.experimentVariant === "A"
+      ? campaign
+      : await db.campaign.findFirst({ where: { shopId, experimentId: campaign.experimentId, experimentVariant: "A" } });
+  if (!variantA) return null;
+
+  return db.campaign.update({ where: { id: variantA.id }, data: { experimentWeight: clamped } });
+}
+
+/**
+ * Ends an A/B test: the winner becomes a normal standalone campaign
+ * again (experiment fields cleared, the "— Variant A/B" suffix
+ * stripped from its name); the loser's fields are cleared the same
+ * way and returned so the caller can pause its live Shopify Discount,
+ * if it has one — that Admin API call needs `admin`, which this
+ * DB-only model layer doesn't have (see the route's own action()).
+ */
+export async function declareExperimentWinner(shopId: string, winnerId: string) {
+  const winner = await getCampaign(shopId, winnerId);
+  if (!winner?.experimentId) return null;
+
+  const loser = await getExperimentSibling(shopId, winner);
+
+  const cleanedWinner = await db.campaign.update({
+    where: { id: winner.id },
+    data: { name: baseExperimentName(winner.name), experimentId: null, experimentVariant: null, experimentWeight: null },
+  });
+
+  const cleanedLoser = loser
+    ? await db.campaign.update({
+        where: { id: loser.id },
+        data: { name: baseExperimentName(loser.name), experimentId: null, experimentVariant: null, experimentWeight: null },
+      })
+    : null;
+
+  return { winner: cleanedWinner, loser: cleanedLoser };
 }
 
 export async function createCampaign(

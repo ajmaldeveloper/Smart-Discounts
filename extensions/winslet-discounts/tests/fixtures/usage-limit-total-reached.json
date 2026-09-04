@@ -5,34 +5,54 @@
     "input": {
       "cart": {
         "cost": {
-          "subtotalAmount": { "amount": "100.00", "currencyCode": "USD" }
+          "subtotalAmount": {
+            "amount": "100.00",
+            "currencyCode": "USD"
+          }
         },
         "buyerIdentity": null,
         "lines": [
           {
             "id": "gid://shopify/CartLine/0",
             "quantity": 1,
-            "cost": { "subtotalAmount": { "amount": "100.00" } },
+            "cost": {
+              "subtotalAmount": {
+                "amount": "100.00"
+              }
+            },
             "merchandise": {
               "__typename": "ProductVariant",
               "id": "gid://shopify/ProductVariant/30",
               "sku": "USAGE-1",
               "weight": 0,
-              "product": { "id": "gid://shopify/Product/30", "vendor": "Acme", "productType": "Widget" }
+              "product": {
+                "id": "gid://shopify/Product/30",
+                "vendor": "Acme",
+                "productType": "Widget"
+              }
             }
           }
-        ]
+        ],
+        "abBucketAttribute": null
       },
       "discount": {
-        "discountClasses": ["ORDER"],
+        "discountClasses": [
+          "ORDER"
+        ],
         "metafield": {
           "value": "{\"id\":\"limited-10\",\"priority\":0,\"isExclusive\":false,\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[]},\"reward\":{\"order\":{\"value\":{\"type\":\"percentage\",\"value\":10}}},\"conflictStrategy\":\"STACK\",\"siblings\":[],\"usageLimitTotal\":10}"
         },
-        "usageCountMetafield": { "value": "10" }
+        "usageCountMetafield": {
+          "value": "10"
+        }
       },
       "localization": {
-        "country": { "isoCode": "US" },
-        "language": { "isoCode": "EN" }
+        "country": {
+          "isoCode": "US"
+        },
+        "language": {
+          "isoCode": "EN"
+        }
       }
     },
     "output": {

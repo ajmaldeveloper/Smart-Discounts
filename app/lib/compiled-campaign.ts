@@ -45,6 +45,13 @@ export interface CompiledSiblingCampaign {
   // the BUYER's own metafield (see CompiledCampaignConfig's own note),
   // readable live for every campaign, self or sibling, in one lookup.
   usageCountAsOfPublish?: number;
+  // Set only when this sibling is one variant of an A/B test — see
+  // CompiledCampaignConfig's own field below for the full mechanism.
+  // Needed here too so that when some OTHER, unrelated campaign builds
+  // its own candidate list, a losing (non-matching-bucket) variant is
+  // excluded from ITS arbitration as well, not just from its own
+  // invocation's self-check.
+  experimentVariant?: "A" | "B";
 }
 
 export interface CompiledCampaignConfig {
@@ -55,6 +62,13 @@ export interface CompiledCampaignConfig {
   reward: RewardConfig;
   siblings: CompiledSiblingCampaign[];
   conflictStrategy: ConflictStrategy;
+  // Set only when this campaign is one variant ("A" or "B") of an A/B
+  // test. A shopper's cart carries a "_winslet_ab_bucket" attribute
+  // (written once by public/widgets/ab-test-bootstrap.js); the
+  // Function reads it and only lets a campaign whose experimentVariant
+  // matches (or a campaign with none at all) be a candidate — see
+  // cart_lines_discounts_generate_run.ts's abBucketFor/matchesBucket.
+  experimentVariant?: "A" | "B";
   // Only one of these two is ever set, mirroring Shop.maxTotalDiscountType
   // (PERCENTAGE vs FIXED_AMOUNT) at compile time. Percent is kept raw
   // (unconverted) because it must be turned into an absolute money cap

@@ -307,6 +307,22 @@ model Campaign {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // A/B TESTING — two Campaigns sharing the same experimentId are the
+  // two variants of one test; experimentVariant is "A" or "B".
+  // experimentWeight (percent of traffic sent to variant A, 0-100)
+  // only matters on the "A" row — variant B implicitly gets the
+  // remainder. A shopper is bucketed once per cart by a storefront
+  // script (public/widgets/ab-test-bootstrap.js) that stores the
+  // result on a cart attribute; the Function reads that attribute to
+  // decide which variant (if either) it is (see
+  // extensions/winslet-discounts/src/cart_lines_discounts_generate_run.ts).
+  // Revenue/order attribution needs no new plumbing — DiscountExecution
+  // and CampaignAnalyticsDaily already key off campaignId, so each
+  // variant's own results are just its own campaign's existing rows.
+  experimentId      String?
+  experimentVariant String?
+  experimentWeight  Int?
+
   versions   CampaignVersion[]
   executions DiscountExecution[]
   analytics  CampaignAnalyticsDaily[]
@@ -314,6 +330,7 @@ model Campaign {
   @@index([shopId])
   @@index([shopId, status])
   @@index([shopId, updatedAt])
+  @@index([shopId, experimentId])
 }
 
 /**

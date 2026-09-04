@@ -171,3 +171,24 @@ export async function getActiveBogoGiftCampaign(shopId: string): Promise<BogoGif
 
   return { active: false };
 }
+
+export type ActiveAbTest = { active: true; variantAWeight: number } | { active: false };
+
+/**
+ * The one A/B test bootstrap script (public/widgets/ab-test-bootstrap.js)
+ * needs to know just one thing: what percent of shoppers to bucket
+ * into Variant A right now. Only one experiment is supported live at a
+ * time — the first ACTIVE campaign that's Variant A of a test — same
+ * "first match wins" simplification as every other getActive* function
+ * in this file. (Variant B never needs to be queried here: it's always
+ * the same experimentId, and its own weight is just 100 minus A's.)
+ */
+export async function getActiveAbTest(shopId: string): Promise<ActiveAbTest> {
+  const variantA = await db.campaign.findFirst({
+    where: { shopId, status: "ACTIVE", experimentVariant: "A" },
+    select: { experimentWeight: true },
+  });
+
+  if (!variantA) return { active: false };
+  return { active: true, variantAWeight: variantA.experimentWeight ?? 50 };
+}

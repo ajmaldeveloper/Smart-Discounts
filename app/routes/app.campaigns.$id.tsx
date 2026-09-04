@@ -7,14 +7,19 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import {
+  declareExperimentWinner,
   duplicateCampaign,
   getCampaign,
+  getExperimentSibling,
+  startExperiment,
   updateCampaignConditions,
   updateCampaignGeneral,
   updateCampaignReward,
   updateCampaignSchedule,
   updateCampaignStacking,
+  updateExperimentWeight,
 } from "../models/campaign.server";
+import { getCampaignAnalyticsSummaries } from "../services/analytics.server";
 import { findConditionGroupById, parseConditionTree } from "../lib/campaign-types";
 import {
   editableEmptyGroup,
@@ -72,7 +77,16 @@ function hideOverlay(id: string) {
   (document.getElementById(id) as OverlayElement | null)?.hideOverlay?.();
 }
 
-const TABS = ["general", "conditions", "audience", "products", "markets", "reward", "schedule", "stacking"] as const;
+// Mirrors startExperiment's own baseExperimentName in
+// app/models/campaign.server.ts — duplicated rather than imported
+// since that file is server-only and this preview runs client-side
+// (just for the confirmation modal's copy, before the real save).
+const VARIANT_SUFFIX_PREVIEW = /\s+—\s+Variant [AB]$/;
+function baseExperimentNamePreview(name: string): string {
+  return name.replace(VARIANT_SUFFIX_PREVIEW, "").trim();
+}
+
+const TABS = ["general", "conditions", "audience", "products", "markets", "reward", "schedule", "stacking", "abTest"] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -84,11 +98,13 @@ const TAB_LABELS: Record<Tab, string> = {
   reward: "Discount",
   schedule: "Schedule",
   stacking: "Stacking",
+  abTest: "A/B Test",
 };
 
 const CREATE_NOTICES: Record<string, string> = {
   created: "Campaign created.",
   duplicated: "Campaign duplicated.",
+  experimentStarted: "A/B test started — style Variant B's discount, then publish it.",
 };
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -145,6 +161,14 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   const entitlements = await getShopEntitlements(session.shop);
 
+  // `campaign` is only ever non-null when `shop` was too (see the
+  // `shop ? await getCampaign(...) : null` above) — TS just can't see
+  // that through the earlier `if (!campaign)` guard.
+  const shopId = shop!.id;
+  const sibling = await getExperimentSibling(shopId, campaign);
+  const [selfSummary, siblingSummary] = sibling ? await getCampaignAnalyticsSummaries(shopId, [campaign.id, sibling.id]) : [null, null];
+  const variantAWeight = (campaign.experimentVariant === "A" ? campaign.experimentWeight : sibling?.experimentWeight) ?? 50;
+
   return {
     planFeatures: entitlements.plan.features,
     campaign: {
@@ -183,7 +207,17 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
           (shop?.conflictSettingsUpdatedAt !== undefined &&
             shop?.conflictSettingsUpdatedAt !== null &&
             shop.conflictSettingsUpdatedAt.getTime() > campaign.publishedAt.getTime())),
+      experimentId: campaign.experimentId,
+      experimentVariant: campaign.experimentVariant,
     },
+    experiment: campaign.experimentId
+      ? {
+          variantAWeight,
+          self: selfSummary,
+          sibling: sibling ? { id: sibling.id, name: sibling.name, status: sibling.status, variant: sibling.experimentVariant } : null,
+          siblingSummary,
+        }
+      : null,
     conditionsTree,
     reward,
     currencyCode: shop?.currencyCode ?? "USD",
@@ -413,6 +447,40 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return redirect(`/app/campaigns/${duplicate.id}?notice=duplicated`);
   }
 
+  if (actionType === "startExperiment") {
+    // The checkout Function only checks a shopper's assigned bucket
+    // for Product/Order rewards (see cart_lines_discounts_generate_run.ts) —
+    // a Shipping reward would just run both variants as ordinary
+    // overlapping campaigns, not actually split traffic.
+    const existing = await getCampaign(shop.id, id);
+    if (existing && normalizeRewardConfig(existing.rewardJson).shipping) {
+      return { error: "A/B testing isn't supported for shipping discounts yet." } satisfies ActionData;
+    }
+
+    const result = await startExperiment(shop.id, id);
+    if (!result) return { error: "Unable to start an A/B test for this campaign." } satisfies ActionData;
+    return redirect(`/app/campaigns/${result.variantB.id}?tab=reward&notice=experimentStarted`);
+  }
+
+  if (actionType === "updateExperimentWeight") {
+    const weight = Number(formData.get("variantAWeight") ?? "50");
+    const updated = await updateExperimentWeight(shop.id, id, weight);
+    if (!updated) return { error: "Unable to update the traffic split." } satisfies ActionData;
+    return { notice: "Traffic split saved." } satisfies ActionData;
+  }
+
+  if (actionType === "declareWinner") {
+    const result = await declareExperimentWinner(shop.id, id);
+    if (!result) return { error: "This campaign isn't part of an A/B test." } satisfies ActionData;
+
+    if (result.loser && result.loser.status === "ACTIVE") {
+      const pauseResult = await pauseCampaign(admin, result.loser);
+      if (!pauseResult.ok) return { error: pauseResult.message ?? "Winner declared, but the other variant couldn't be paused." } satisfies ActionData;
+    }
+
+    return { notice: "Winner declared — this is now a standalone campaign again." } satisfies ActionData;
+  }
+
   if (actionType === "delete") {
     const campaign = await getCampaign(shop.id, id);
     if (!campaign) return { error: "Campaign not found." } satisfies ActionData;
@@ -573,6 +641,7 @@ type FoundLoaderData = Exclude<Awaited<ReturnType<typeof loader>>, { notFound: t
 function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
   const {
     campaign,
+    experiment,
     conditionsTree,
     reward: loadedReward,
     currencyCode,
@@ -643,6 +712,8 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
   const initialUsageLimitPerCustomer = campaign.usageLimitPerCustomer !== null ? String(campaign.usageLimitPerCustomer) : "";
   const [usageLimitTotal, setUsageLimitTotal] = useState(initialUsageLimitTotal);
   const [usageLimitPerCustomer, setUsageLimitPerCustomer] = useState(initialUsageLimitPerCustomer);
+  const [variantAWeight, setVariantAWeight] = useState(experiment?.variantAWeight ?? 50);
+  const isWeightDirty = experiment !== null && variantAWeight !== experiment.variantAWeight;
 
   // Lifted here (not into ProductsEditor's own state) because each tab
   // unmounts whenever the merchant switches away from it — a cache
@@ -705,6 +776,9 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
   const isExpiring = pendingAction === "expire";
   const isDuplicating = pendingAction === "duplicate";
   const isDeleting = pendingAction === "delete";
+  const isStartingExperiment = pendingAction === "startExperiment";
+  const isSavingExperimentWeight = pendingAction === "updateExperimentWeight";
+  const isDeclaringWinner = pendingAction === "declareWinner";
   const isRunningHeaderAction = isPausing || isUnpublishing || isExpiring || isDuplicating || isDeleting;
 
   // None of Conditions/Customers/Products/Markets have their own Save
@@ -1161,6 +1235,155 @@ function CampaignEditorLoaded({ data }: { data: FoundLoaderData }) {
               Save stacking settings
             </s-button>
           </s-stack>
+        </s-section>
+      )}
+
+      {activeTab === "abTest" && !experiment && (
+        <s-section heading="A/B Test">
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              Test two versions of this campaign&apos;s discount against each other. Starting a test turns this
+              campaign into <s-text type="strong">Variant A</s-text> and creates a <s-text type="strong">Variant B</s-text>{" "}
+              draft with the same targeting and schedule — style Variant B&apos;s discount differently, then publish
+              both. Each shopper is randomly (and consistently) shown one variant, and their order gets credited back
+              to whichever one they saw, so Analytics shows you which converts better.
+            </s-paragraph>
+
+            <s-banner tone="info">
+              Splitting traffic needs one small script pasted in your theme, once — see the{" "}
+              <s-link href="/app/storefront-widgets">Storefront</s-link> page&apos;s A/B testing card.
+            </s-banner>
+
+            <s-stack direction="inline" justifyContent="start">
+              <s-button variant="primary" commandFor="campaign-start-experiment-modal" command="--show">
+                Start an A/B test
+              </s-button>
+            </s-stack>
+          </s-stack>
+
+          <s-modal id="campaign-start-experiment-modal" heading="Start an A/B test?">
+            <s-paragraph>
+              This renames the current campaign to &quot;{baseExperimentNamePreview(campaign.name)} — Variant A&quot;
+              and creates a new draft, &quot;{baseExperimentNamePreview(campaign.name)} — Variant B&quot;, with the
+              same targeting and schedule. You&apos;ll be taken to Variant B to give it its own discount.
+            </s-paragraph>
+            <s-button slot="secondary-actions" commandFor="campaign-start-experiment-modal" command="--hide">
+              Cancel
+            </s-button>
+            <s-button
+              slot="primary-action"
+              variant="primary"
+              loading={isStartingExperiment}
+              onClick={() => {
+                hideOverlay("campaign-start-experiment-modal");
+                const data = new FormData();
+                data.set("_action", "startExperiment");
+                submit(data, { method: "post" });
+              }}
+            >
+              Start test
+            </s-button>
+          </s-modal>
+        </s-section>
+      )}
+
+      {activeTab === "abTest" && experiment && (
+        <s-section heading="A/B Test">
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              This campaign is <s-text type="strong">Variant {campaign.experimentVariant}</s-text> of an active A/B
+              test against <s-text type="strong">{experiment.sibling?.name ?? "(deleted)"}</s-text>.
+            </s-paragraph>
+
+            <s-grid gridTemplateColumns="repeat(2, minmax(200px, 1fr))" gap="base">
+              <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+                <s-stack direction="block" gap="small-200">
+                  <s-text type="strong">Variant {campaign.experimentVariant} (this campaign)</s-text>
+                  <s-text color="subdued">{displayStatus(campaign)}</s-text>
+                  <s-text>{experiment.self?.ordersCount ?? 0} orders</s-text>
+                  <s-text>${(experiment.self?.totalRevenue ?? 0).toFixed(2)} revenue influenced</s-text>
+                </s-stack>
+              </s-box>
+
+              <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+                <s-stack direction="block" gap="small-200">
+                  <s-text type="strong">Variant {experiment.sibling?.variant ?? "?"}</s-text>
+                  <s-text color="subdued">{experiment.sibling ? experiment.sibling.status : "Deleted"}</s-text>
+                  <s-text>{experiment.siblingSummary?.ordersCount ?? 0} orders</s-text>
+                  <s-text>${(experiment.siblingSummary?.totalRevenue ?? 0).toFixed(2)} revenue influenced</s-text>
+                  {experiment.sibling && (
+                    <s-button variant="tertiary" href={`/app/campaigns/${experiment.sibling.id}`}>
+                      Open Variant {experiment.sibling.variant}
+                    </s-button>
+                  )}
+                </s-stack>
+              </s-box>
+            </s-grid>
+
+            <s-heading>Traffic split</s-heading>
+            <s-number-field
+              label="Percent of shoppers who see Variant A"
+              min={0}
+              max={100}
+              suffix="%"
+              value={String(variantAWeight)}
+              onInput={(event: { target: EventTarget | null }) => {
+                const target = event.target as { value?: string } | null;
+                setVariantAWeight(Number(target?.value ?? "50") || 0);
+              }}
+              details={`Variant B gets the rest (${100 - variantAWeight}%). Applies as soon as you save, no republish needed.`}
+            />
+            <s-stack direction="inline" justifyContent="start">
+              <s-button
+                variant="primary"
+                loading={isSavingExperimentWeight}
+                disabled={isSavingExperimentWeight || !isWeightDirty}
+                onClick={() => {
+                  const data = new FormData();
+                  data.set("_action", "updateExperimentWeight");
+                  data.set("variantAWeight", String(variantAWeight));
+                  submit(data, { method: "post" });
+                }}
+              >
+                Save traffic split
+              </s-button>
+            </s-stack>
+
+            <s-heading>Conclude the test</s-heading>
+            <s-paragraph>
+              Declaring a winner turns this campaign back into a standalone campaign (its name and A/B fields reset)
+              and pauses the other variant.
+            </s-paragraph>
+            <s-stack direction="inline" justifyContent="start">
+              <s-button variant="secondary" tone="critical" commandFor="campaign-declare-winner-modal" command="--show">
+                Declare Variant {campaign.experimentVariant} the winner
+              </s-button>
+            </s-stack>
+          </s-stack>
+
+          <s-modal id="campaign-declare-winner-modal" heading="Declare this variant the winner?">
+            <s-paragraph>
+              Variant {experiment.sibling?.variant ?? "the other variant"} will be paused, and both campaigns leave
+              the A/B test — this one becomes a normal standalone campaign again.
+            </s-paragraph>
+            <s-button slot="secondary-actions" commandFor="campaign-declare-winner-modal" command="--hide">
+              Cancel
+            </s-button>
+            <s-button
+              slot="primary-action"
+              variant="primary"
+              tone="critical"
+              loading={isDeclaringWinner}
+              onClick={() => {
+                hideOverlay("campaign-declare-winner-modal");
+                const data = new FormData();
+                data.set("_action", "declareWinner");
+                submit(data, { method: "post" });
+              }}
+            >
+              Declare winner
+            </s-button>
+          </s-modal>
         </s-section>
       )}
 

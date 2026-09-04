@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import db from "../db.server";
 import {
+  getActiveAbTest,
   getActiveBogoGiftCampaign,
   getActiveFreeShippingThreshold,
   getActiveOrderDiscountThreshold,
@@ -330,5 +331,55 @@ describe("getActiveTieredDiscount", () => {
     });
 
     expect((await getActiveTieredDiscount(shop.id) as { tierMetric: string }).tierMetric).toBe("cart.quantity");
+  });
+});
+
+describe("getActiveAbTest", () => {
+  it("returns inactive when the shop has no campaigns at all", async () => {
+    const shop = await makeShop();
+    expect(await getActiveAbTest(shop.id)).toEqual({ active: false });
+  });
+
+  it("returns the ACTIVE variant A's own weight", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, { status: "ACTIVE" }).then((c) =>
+      db.campaign.update({ where: { id: c.id }, data: { experimentId: "exp-1", experimentVariant: "A", experimentWeight: 70 } }),
+    );
+
+    expect(await getActiveAbTest(shop.id)).toEqual({ active: true, variantAWeight: 70 });
+  });
+
+  it("defaults to 50 when experimentWeight is unset", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, { status: "ACTIVE" }).then((c) =>
+      db.campaign.update({ where: { id: c.id }, data: { experimentId: "exp-1", experimentVariant: "A" } }),
+    );
+
+    expect(await getActiveAbTest(shop.id)).toEqual({ active: true, variantAWeight: 50 });
+  });
+
+  it("ignores a PAUSED variant A", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, { status: "PAUSED" }).then((c) =>
+      db.campaign.update({ where: { id: c.id }, data: { experimentId: "exp-1", experimentVariant: "A", experimentWeight: 70 } }),
+    );
+
+    expect(await getActiveAbTest(shop.id)).toEqual({ active: false });
+  });
+
+  it("ignores an ACTIVE campaign that's variant B, not A", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, { status: "ACTIVE" }).then((c) =>
+      db.campaign.update({ where: { id: c.id }, data: { experimentId: "exp-1", experimentVariant: "B", experimentWeight: 70 } }),
+    );
+
+    expect(await getActiveAbTest(shop.id)).toEqual({ active: false });
+  });
+
+  it("ignores an ACTIVE campaign that isn't part of any experiment", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, { status: "ACTIVE" });
+
+    expect(await getActiveAbTest(shop.id)).toEqual({ active: false });
   });
 });

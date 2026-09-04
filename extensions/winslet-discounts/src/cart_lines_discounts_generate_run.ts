@@ -31,6 +31,7 @@ function parseCompiledConfig(rawValue: string | undefined): CompiledCampaignConf
       ...(parsed.maxTotalDiscountAmount !== undefined ? { maxTotalDiscountAmount: parsed.maxTotalDiscountAmount } : {}),
       ...(parsed.usageLimitTotal !== undefined ? { usageLimitTotal: parsed.usageLimitTotal } : {}),
       ...(parsed.usageLimitPerCustomer !== undefined ? { usageLimitPerCustomer: parsed.usageLimitPerCustomer } : {}),
+      ...(parsed.experimentVariant !== undefined ? { experimentVariant: parsed.experimentVariant } : {}),
     };
   } catch {
     // A malformed metafield must degrade to "no discount" for this one
@@ -216,6 +217,23 @@ function candidateFrom(id: string, priority: number, isExclusive: boolean, estim
   return { id, priority, isExclusive, estimatedAmount };
 }
 
+/**
+ * "A" or "B", as assigned once per cart by public/widgets/ab-test-
+ * bootstrap.js and stored on a cart attribute. Missing/blank (the
+ * script never ran — JS disabled, an ad blocker, a checkout link
+ * opened directly) defaults to "A" rather than excluding every
+ * experiment variant outright, so a test degrades to control-only
+ * instead of silently withholding a discount from that shopper.
+ */
+function abBucketFor(input: CartLinesDiscountsGenerateRunInput): "A" | "B" {
+  return input.cart.abBucketAttribute?.value === "B" ? "B" : "A";
+}
+
+/** A campaign with no experimentVariant is never part of an A/B test and is always eligible; one that has it only competes for shoppers bucketed into that exact variant. */
+function matchesBucket(experimentVariant: "A" | "B" | undefined, bucket: "A" | "B"): boolean {
+  return experimentVariant === undefined || experimentVariant === bucket;
+}
+
 export function cartLinesDiscountsGenerateRun(
   input: CartLinesDiscountsGenerateRunInput,
 ): CartLinesDiscountsGenerateRunResult {
@@ -227,6 +245,13 @@ export function cartLinesDiscountsGenerateRun(
 
   const compiled = parseCompiledConfig(input.discount.metafield?.value);
   if (!compiled) return EMPTY_RESULT;
+
+  // A/B testing: if this campaign is one variant of a test and this
+  // shopper's cart was bucketed into the OTHER variant, this
+  // invocation contributes nothing at all — the matching variant's own
+  // separate invocation is the one that actually emits a discount.
+  const bucket = abBucketFor(input);
+  if (!matchesBucket(compiled.experimentVariant, bucket)) return EMPTY_RESULT;
 
   // Usage limits: self's own total count is live (this discount node's
   // own metafield); a sibling's total count is only as fresh as this
@@ -281,6 +306,7 @@ export function cartLinesDiscountsGenerateRun(
       const siblingEstimates = compiled.siblings
         .filter((sibling): sibling is CompiledSiblingCampaign & { reward: { product: ProductReward } } => Boolean(sibling.reward.product))
         .filter(siblingWithinLimits)
+        .filter((sibling) => matchesBucket(sibling.experimentVariant, bucket))
         .map((sibling) => ({
           sibling,
           estimate: estimateProductDiscount(sibling.conditions, sibling.reward.product, input.cart.lines, cartContext, tierMetrics),
@@ -327,6 +353,7 @@ export function cartLinesDiscountsGenerateRun(
       const siblingEstimates = compiled.siblings
         .filter((sibling) => sibling.reward.order)
         .filter(siblingWithinLimits)
+        .filter((sibling) => matchesBucket(sibling.experimentVariant, bucket))
         .map((sibling) => ({
           sibling,
           amount: estimateOrderDiscount(sibling.conditions, sibling.reward.order, input.cart.lines, cartContext, cartSubtotal, tierMetrics).amount,

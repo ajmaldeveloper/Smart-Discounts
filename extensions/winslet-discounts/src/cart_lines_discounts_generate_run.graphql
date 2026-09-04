@@ -6,6 +6,15 @@ query CartLinesDiscountsGenerateRunInput {
         currencyCode
       }
     }
+    # Set once per cart by public/widgets/ab-test-bootstrap.js (either
+    # "A" or "B") — decides which variant of an A/B-tested campaign, if
+    # either, is eligible to apply for this shopper. Missing/blank
+    # (script never ran, JS disabled, ad blocker) defaults to "A" — see
+    # abBucketFor() below — so an experiment degrades to control-only
+    # rather than silently withholding any discount.
+    abBucketAttribute: attribute(key: "_winslet_ab_bucket") {
+      value
+    }
     buyerIdentity {
       isAuthenticated
       customer {

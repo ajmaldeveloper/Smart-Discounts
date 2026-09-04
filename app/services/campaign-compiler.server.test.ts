@@ -14,7 +14,15 @@ function fakeAdmin(handler: (query: string, variables: Record<string, unknown>) 
 
 type CampaignForCompilation = Pick<
   Campaign,
-  "id" | "conditionsJson" | "rewardJson" | "priority" | "isExclusive" | "usageLimitTotal" | "usageLimitPerCustomer" | "usageCount"
+  | "id"
+  | "conditionsJson"
+  | "rewardJson"
+  | "priority"
+  | "isExclusive"
+  | "usageLimitTotal"
+  | "usageLimitPerCustomer"
+  | "usageCount"
+  | "experimentVariant"
 >;
 
 function campaignWith(conditionsJson: unknown, rewardJson: unknown = {}): CampaignForCompilation {
@@ -27,6 +35,7 @@ function campaignWith(conditionsJson: unknown, rewardJson: unknown = {}): Campai
     usageLimitTotal: null,
     usageLimitPerCustomer: null,
     usageCount: 0,
+    experimentVariant: null,
   } as CampaignForCompilation;
 }
 
@@ -296,6 +305,7 @@ describe("compileCampaign — M10 sibling snapshot and shop conflict settings", 
       usageLimitTotal: null,
       usageLimitPerCustomer: null,
       usageCount: 0,
+      experimentVariant: null,
     } as CampaignForCompilation;
 
     const compiled = await compileCampaign(admin, campaign, [], { conflictStrategy: "HIGHEST_DISCOUNT" });
@@ -330,6 +340,7 @@ describe("compileCampaign — M10 sibling snapshot and shop conflict settings", 
         usageLimitTotal: null,
         usageLimitPerCustomer: null,
         usageCount: 0,
+        experimentVariant: null,
       },
     ] as CampaignForCompilation[];
 

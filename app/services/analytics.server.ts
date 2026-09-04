@@ -74,6 +74,39 @@ export async function getAnalyticsOverview(shopId: string): Promise<AnalyticsOve
   };
 }
 
+/** Same shape/columns as getAnalyticsOverview's per-campaign rows, scoped to a specific set of campaigns (e.g. the two variants of an A/B test) instead of the whole shop. Returned in the same order as `campaignIds`. */
+export async function getCampaignAnalyticsSummaries(shopId: string, campaignIds: string[]): Promise<CampaignAnalyticsSummary[]> {
+  if (campaignIds.length === 0) return [];
+
+  const [rows, campaigns] = await Promise.all([
+    db.campaignAnalyticsDaily.groupBy({
+      by: ["campaignId"],
+      where: { campaign: { shopId }, campaignId: { in: campaignIds } },
+      _sum: { ordersCount: true, totalDiscount: true, totalRevenue: true },
+    }),
+    db.campaign.findMany({ where: { shopId, id: { in: campaignIds } }, select: { id: true, name: true } }),
+  ]);
+
+  const aggregateByCampaignId = new Map(rows.map((row) => [row.campaignId, row]));
+  const nameById = new Map(campaigns.map((c) => [c.id, c.name]));
+
+  return campaignIds.map((campaignId) => {
+    const aggregate = aggregateByCampaignId.get(campaignId);
+    const ordersCount = aggregate?._sum.ordersCount ?? 0;
+    const totalDiscount = Number(aggregate?._sum.totalDiscount ?? 0);
+    const totalRevenue = Number(aggregate?._sum.totalRevenue ?? 0);
+
+    return {
+      campaignId,
+      campaignName: nameById.get(campaignId) ?? "(deleted campaign)",
+      ordersCount,
+      totalDiscount,
+      totalRevenue,
+      averageDiscount: ordersCount > 0 ? totalDiscount / ordersCount : 0,
+    };
+  });
+}
+
 export interface AnalyticsTrendDay {
   date: string;
   ordersCount: number;

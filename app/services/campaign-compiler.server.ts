@@ -157,6 +157,7 @@ type CampaignForCompilation = Pick<
   | "usageLimitTotal"
   | "usageLimitPerCustomer"
   | "usageCount"
+  | "experimentVariant"
 >;
 
 export interface ShopConflictSettings {
@@ -201,6 +202,9 @@ export async function compileCampaign(
         ...(sibling.usageLimitTotal !== null ? { usageLimitTotal: sibling.usageLimitTotal } : {}),
         ...(sibling.usageLimitPerCustomer !== null ? { usageLimitPerCustomer: sibling.usageLimitPerCustomer } : {}),
         ...(sibling.usageLimitTotal !== null ? { usageCountAsOfPublish: sibling.usageCount } : {}),
+        ...(sibling.experimentVariant === "A" || sibling.experimentVariant === "B"
+          ? { experimentVariant: sibling.experimentVariant }
+          : {}),
       };
     }),
   );
@@ -221,6 +225,9 @@ export async function compileCampaign(
       : {}),
     ...(campaign.usageLimitTotal !== null ? { usageLimitTotal: campaign.usageLimitTotal } : {}),
     ...(campaign.usageLimitPerCustomer !== null ? { usageLimitPerCustomer: campaign.usageLimitPerCustomer } : {}),
+    ...(campaign.experimentVariant === "A" || campaign.experimentVariant === "B"
+      ? { experimentVariant: campaign.experimentVariant }
+      : {}),
   };
 }
 
@@ -249,6 +256,7 @@ export async function loadSiblingCampaigns(shopId: string, excludeCampaignId: st
       usageLimitTotal: true,
       usageLimitPerCustomer: true,
       usageCount: true,
+      experimentVariant: true,
     },
   });
 }

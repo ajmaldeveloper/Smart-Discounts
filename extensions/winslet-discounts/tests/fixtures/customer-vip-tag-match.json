@@ -44,7 +44,8 @@
               }
             }
           }
-        ]
+        ],
+        "abBucketAttribute": null
       },
       "discount": {
         "discountClasses": [

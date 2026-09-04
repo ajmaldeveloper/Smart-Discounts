@@ -5,42 +5,64 @@
     "input": {
       "cart": {
         "cost": {
-          "subtotalAmount": { "amount": "100.00", "currencyCode": "USD" }
+          "subtotalAmount": {
+            "amount": "100.00",
+            "currencyCode": "USD"
+          }
         },
         "buyerIdentity": {
           "isAuthenticated": true,
           "customer": {
             "id": "gid://shopify/Customer/2",
             "numberOfOrders": 3,
-            "amountSpent": { "amount": "300.00" },
-            "buyerDataMetafield": { "value": "{\"tags\":[],\"usage\":{\"limited-per-customer-2\": 2}}" }
+            "amountSpent": {
+              "amount": "300.00"
+            },
+            "buyerDataMetafield": {
+              "value": "{\"tags\":[],\"usage\":{\"limited-per-customer-2\": 2}}"
+            }
           }
         },
         "lines": [
           {
             "id": "gid://shopify/CartLine/0",
             "quantity": 1,
-            "cost": { "subtotalAmount": { "amount": "100.00" } },
+            "cost": {
+              "subtotalAmount": {
+                "amount": "100.00"
+              }
+            },
             "merchandise": {
               "__typename": "ProductVariant",
               "id": "gid://shopify/ProductVariant/32",
               "sku": "USAGE-3",
               "weight": 0,
-              "product": { "id": "gid://shopify/Product/32", "vendor": "Acme", "productType": "Widget" }
+              "product": {
+                "id": "gid://shopify/Product/32",
+                "vendor": "Acme",
+                "productType": "Widget"
+              }
             }
           }
-        ]
+        ],
+        "abBucketAttribute": null
       },
       "discount": {
-        "discountClasses": ["ORDER"],
+        "discountClasses": [
+          "ORDER"
+        ],
         "metafield": {
           "value": "{\"id\":\"limited-per-customer-2\",\"priority\":0,\"isExclusive\":false,\"conditions\":{\"id\":\"root\",\"type\":\"group\",\"combinator\":\"ALL\",\"children\":[]},\"reward\":{\"order\":{\"value\":{\"type\":\"percentage\",\"value\":10}}},\"conflictStrategy\":\"STACK\",\"siblings\":[],\"usageLimitPerCustomer\":2}"
         },
         "usageCountMetafield": null
       },
       "localization": {
-        "country": { "isoCode": "US" },
-        "language": { "isoCode": "EN" }
+        "country": {
+          "isoCode": "US"
+        },
+        "language": {
+          "isoCode": "EN"
+        }
       }
     },
     "output": {

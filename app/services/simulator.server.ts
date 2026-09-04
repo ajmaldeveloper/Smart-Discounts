@@ -97,7 +97,22 @@ export interface SimulatorResult {
 
 export async function runSimulation(shopId: string, scenario: SimulatorScenario): Promise<SimulatorResult> {
   const campaigns = await db.campaign.findMany({
-    where: { shopId, status: { in: ["ACTIVE", "DRAFT", "PAUSED"] } },
+    // Variant B of an A/B test is excluded: the simulator has no
+    // concept of which bucket a shopper would land in, and the
+    // checkout Function itself defaults an unassigned/missing bucket
+    // to "A" (see cart_lines_discounts_generate_run.ts's abBucketFor)
+    // — showing Variant B here would make it look like both variants
+    // always compete simultaneously, which never actually happens at
+    // checkout.
+    // Prisma's `{ not: "B" }` on a nullable column excludes NULLs too
+    // (translates to a plain `!= 'B'`, which is neither true nor false
+    // for a null row) — the OR spells out "no variant at all, or some
+    // variant that isn't B" explicitly instead.
+    where: {
+      shopId,
+      status: { in: ["ACTIVE", "DRAFT", "PAUSED"] },
+      OR: [{ experimentVariant: null }, { experimentVariant: { not: "B" } }],
+    },
     orderBy: { updatedAt: "desc" },
   });
 

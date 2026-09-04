@@ -17,6 +17,9 @@ export interface CompiledSiblingCampaign {
   usageLimitTotal?: number;
   usageLimitPerCustomer?: number;
   usageCountAsOfPublish?: number;
+  // Set only when this sibling is one variant of an A/B test — see
+  // CompiledCampaignConfig's own field below.
+  experimentVariant?: "A" | "B";
 }
 
 export interface CompiledCampaignConfig {
@@ -32,6 +35,11 @@ export interface CompiledCampaignConfig {
   maxTotalDiscountAmount?: number;
   usageLimitTotal?: number;
   usageLimitPerCustomer?: number;
+  // Set only when this campaign is one variant ("A" or "B") of an A/B
+  // test — see cart_lines_discounts_generate_run.ts's
+  // abBucketFor/matchesBucket for how the cart's own
+  // "_winslet_ab_bucket" attribute decides eligibility.
+  experimentVariant?: "A" | "B";
 }
 
 export const RESOLVED_PRODUCT_IDS_FIELD = "_resolvedProductIds";
