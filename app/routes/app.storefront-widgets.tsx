@@ -133,15 +133,28 @@ export default function StorefrontWidgets() {
       <s-section heading="Free shipping bar">
         <s-stack direction="block" gap="base">
           <s-paragraph>
-            Shows live progress toward whichever active campaign has a free-shipping minimum — no need to re-enter
-            the threshold here, it always matches the real discount. Paste the snippet below wherever you want it to
-            show (cart drawer, cart page, above the footer — your theme&apos;s code editor, your placement), then
-            style it here.
+            Shows live progress toward whichever active campaign has a free-shipping minimum — always in sync with
+            the real discount, no manual re-entry.
           </s-paragraph>
 
           <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+            <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
+              <s-stack direction="block" gap="small-400">
+                <s-text type="strong">Add to your store</s-text>
+                <s-text color="subdued">
+                  Paste this snippet into your theme&apos;s code wherever you want it to show — the cart drawer, the
+                  cart page, above the footer.
+                </s-text>
+              </s-stack>
+              <s-button variant="primary" commandFor="storefront-widget-snippet-modal" command="--show">
+                Copy snippet code
+              </s-button>
+            </s-stack>
+          </s-box>
+
+          <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
             <s-stack direction="block" gap="base">
-              <s-grid gridTemplateColumns="repeat(4, minmax(120px, 1fr))" gap="base">
+              <s-grid gridTemplateColumns="repeat(2, minmax(160px, 1fr))" gap="base">
                 <s-color-field
                   label="Background color"
                   value={trackColor}
@@ -186,20 +199,6 @@ export default function StorefrontWidgets() {
                 value={completeMessage}
                 onInput={(event: ControlEvent) => setCompleteMessage(readValue(event))}
               />
-            </s-stack>
-          </s-box>
-
-          <s-box background="subdued" borderWidth="base" borderColor="subdued" borderRadius="base" padding="small">
-            <s-stack direction="inline" gap="small-200" alignItems="center" justifyContent="space-between">
-              <s-stack direction="inline" gap="small-200" alignItems="center">
-                <s-icon type="info" tone="neutral" />
-                <s-text color="subdued">
-                  Paste this once into your theme&apos;s code (e.g. the cart drawer snippet) wherever you want it to appear.
-                </s-text>
-              </s-stack>
-              <s-button variant="secondary" commandFor="storefront-widget-snippet-modal" command="--show">
-                Copy snippet code
-              </s-button>
             </s-stack>
           </s-box>
 
