@@ -227,16 +227,27 @@
       window.fetch = patched;
     }
 
-    loadConfig() {
+    loadConfig(retriesLeft) {
+      // The very first load, before sharedConfig exists, has nothing to
+      // fall back to if this one request hiccups — an occasional
+      // network blip would otherwise leave the bar permanently hidden
+      // until the next 60s refresh. Retrying a couple of times, a
+      // second apart, costs nothing once sharedConfig is already known
+      // (the periodic refresh just tries once, same as before).
+      var attemptsLeft = typeof retriesLeft === "number" ? retriesLeft : sharedConfig ? 0 : 3;
+
       fetch(this.proxyRoot + "/free-shipping", { headers: { accept: "application/json" } })
-        .then((response) => response.json())
+        .then((response) => {
+          if (!response.ok) throw new Error("bad status " + response.status);
+          return response.json();
+        })
         .then((config) => {
           sharedConfig = config;
           this.applyConfig(config);
           if (config.active) this.refreshCart();
         })
         .catch(() => {
-          /* Network hiccup — keep showing whatever config we already have. */
+          if (attemptsLeft > 0) setTimeout(() => this.loadConfig(attemptsLeft - 1), 1000);
         });
     }
 
