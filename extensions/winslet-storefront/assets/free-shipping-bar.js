@@ -50,7 +50,12 @@
       this.fillEl = this.querySelector(".winslet-fsb__fill");
       this.messageEl = this.querySelector(".winslet-fsb__message");
 
-      this.style.cssText += "position:sticky;top:0;z-index:9999;padding:8px 16px;background:#fff;";
+      // A target:"body" app embed is injected right before </body>, at
+      // the very bottom of the page's HTML — position:sticky would only
+      // engage once scrolled all the way down to where it naturally
+      // sits. position:fixed pins it to the top of the viewport
+      // immediately, regardless of where in the DOM it landed.
+      this.style.cssText += "position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px 16px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.1);";
 
       this.loadConfig();
       this.configInterval = setInterval(() => this.loadConfig(), CONFIG_REFRESH_MS);
