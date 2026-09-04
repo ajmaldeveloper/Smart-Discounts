@@ -23,7 +23,13 @@ prefix = "apps"
 # modify a customer's actual profile data.
 # read_markets backs M5 (Markets tab + market.id/market.countryCode
 # condition fields) — read-only, Winslet never creates/edits Markets.
-scopes = "write_discounts,read_products,read_customers,write_customers,read_orders,read_markets"
+# unauthenticated_read_product_listings backs the BOGO gift-picker's
+# App Proxy endpoint (apps.proxy.bogo-gift.tsx) — it calls the
+# Storefront API, not the Admin API, to resolve the free-gift products'
+# live title/image/price/variant so a shopper only ever sees pricing
+# they can actually check out with. Without this scope declared here,
+# every storefront.graphql() call is rejected with a 403.
+scopes = "write_discounts,read_products,read_customers,write_customers,read_orders,read_markets,unauthenticated_read_product_listings"
 
 [webhooks]
 api_version = "2026-10"

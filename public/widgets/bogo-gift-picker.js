@@ -1,14 +1,24 @@
 /**
- * Winslet "Buy X get Y free" gift-picker. Same distribution model as
+ * Winslet "Buy X get Y free" widgets. Same distribution model as
  * free-shipping-bar.js in this same directory (see that file's own
  * header comment for the full rationale): a loader <script> pasted
- * once in theme.liquid, and a separate, pure-HTML placement tag pasted
- * wherever the merchant wants the widget to show — safe inside a cart
+ * once in theme.liquid, and separate, pure-HTML placement tags pasted
+ * wherever the merchant wants each piece to show — safe inside a cart
  * drawer that re-renders via AJAX, since a plain custom-element tag
  * (unlike a <script>) still gets upgraded by the browser no matter how
  * it entered the DOM.
  *
- * Unlike the free-shipping bar, the Add-to-cart button is gated: it's
+ * This one loader defines TWO independent custom elements so a
+ * merchant can place the progress bar and the gift-product picker in
+ * different spots of the page (e.g. bar pinned in the cart drawer
+ * header, product cards further down):
+ *   - <winslet-bogo-gift-bar>      progress bar + locked/unlocked message
+ *   - <winslet-bogo-gift-products> free-gift product cards + Add button
+ * Both read the same cached config/cart (module-scoped below), so
+ * either can be present alone, or both together, with zero duplicate
+ * network requests.
+ *
+ * The Add-to-cart button on the products widget is gated: it's
  * disabled until the shopper has actually met the campaign's own "buy
  * X" condition. That condition tree can reference arbitrary
  * product/cart fields, so this ships a deliberate, minimal duplicate
@@ -25,7 +35,9 @@
  * of doing this client-side at all, not a bug.
  */
 (function () {
-  if (customElements.get("winslet-bogo-gift-picker")) return;
+  var BAR_TAG = "winslet-bogo-gift-bar";
+  var PRODUCTS_TAG = "winslet-bogo-gift-products";
+  if (customElements.get(BAR_TAG) && customElements.get(PRODUCTS_TAG)) return;
 
   var CONFIG_REFRESH_MS = 60000;
   var CART_ENDPOINT_PATTERN = /\/cart\/(add|update|change|clear)(\.js)?(\?|$)/;
@@ -154,30 +166,72 @@
     }, 0);
   }
 
-  // ---- widget ----
+  function qualification(config, cart) {
+    var current = matchedQuantity(config.conditions, cart);
+    var threshold = config.buyQuantity;
+    // threshold+1 is the unit count that earns the first free gift
+    // (see reward-types.ts's progressive-BOGO comment) — always >= 1,
+    // so this is never a divide-by-zero even when threshold is 0
+    // ("free gift with any purchase").
+    return {
+      percent: Math.min(100, (current / (threshold + 1)) * 100),
+      remaining: Math.max(0, threshold + 1 - current),
+      qualified: current > threshold,
+    };
+  }
+
+  // ---- shared style ----
 
   function ensureSharedStyle() {
     if (document.getElementById(STYLE_ELEMENT_ID)) return;
     var style = document.createElement("style");
     style.id = STYLE_ELEMENT_ID;
     style.textContent =
-      "winslet-bogo-gift-picker{display:flex;flex-direction:column;gap:var(--winslet-bgp-gap);padding:var(--winslet-bgp-padding-top) var(--winslet-bgp-padding-right) var(--winslet-bgp-padding-bottom) var(--winslet-bgp-padding-left);}" +
-      "winslet-bogo-gift-picker .winslet-bgp__track{height:var(--winslet-bgp-thickness);border-radius:var(--winslet-bgp-roundness);overflow:hidden;}" +
-      "winslet-bogo-gift-picker .winslet-bgp__fill{height:100%;width:0%;border-radius:var(--winslet-bgp-roundness);box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);transition:width 0.3s ease,background-color 0.3s ease;}" +
-      "winslet-bogo-gift-picker .winslet-bgp__message{margin:0;font-size:var(--winslet-bgp-font-size);text-align:center;}" +
-      "winslet-bogo-gift-picker .winslet-bgp__products{display:flex;flex-direction:column;gap:8px;}" +
-      "winslet-bogo-gift-picker .winslet-bgp__product{display:flex;align-items:center;gap:12px;border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:8px;}" +
-      "winslet-bogo-gift-picker .winslet-bgp__product img{width:48px;height:48px;object-fit:cover;border-radius:4px;}" +
-      "winslet-bogo-gift-picker .winslet-bgp__product-title{flex:1;font-size:var(--winslet-bgp-font-size);}" +
-      "winslet-bogo-gift-picker .winslet-bgp__add{border:none;border-radius:6px;padding:8px 16px;font-size:var(--winslet-bgp-font-size);cursor:pointer;background:var(--winslet-bgp-add-bg);color:var(--winslet-bgp-add-fg);}" +
-      "winslet-bogo-gift-picker .winslet-bgp__add:disabled{opacity:0.5;cursor:not-allowed;}" +
+      BAR_TAG +
+      "," +
+      PRODUCTS_TAG +
+      "{padding:var(--winslet-bgp-padding-top) var(--winslet-bgp-padding-right) var(--winslet-bgp-padding-bottom) var(--winslet-bgp-padding-left);}" +
+      BAR_TAG +
+      "{display:flex;flex-direction:column;gap:var(--winslet-bgp-gap);}" +
+      BAR_TAG +
+      " .winslet-bgp__track{height:var(--winslet-bgp-thickness);border-radius:var(--winslet-bgp-roundness);overflow:hidden;}" +
+      BAR_TAG +
+      " .winslet-bgp__fill{height:100%;width:0%;border-radius:var(--winslet-bgp-roundness);box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);transition:width 0.3s ease,background-color 0.3s ease;}" +
+      BAR_TAG +
+      " .winslet-bgp__message{margin:0;font-size:var(--winslet-bgp-font-size);text-align:center;}" +
+      PRODUCTS_TAG +
+      "{display:block;}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__products{display:flex;flex-direction:column;gap:8px;}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__product{display:flex;align-items:center;gap:12px;border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:8px;}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__product img{width:48px;height:48px;object-fit:cover;border-radius:4px;}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__product-title{flex:1;font-size:var(--winslet-bgp-font-size);}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__add{border:none;border-radius:6px;padding:8px 16px;font-size:var(--winslet-bgp-font-size);cursor:pointer;background:var(--winslet-bgp-add-bg);color:var(--winslet-bgp-add-fg);}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__add:disabled{opacity:0.5;cursor:not-allowed;}" +
       "@media (max-width:" +
       MOBILE_BREAKPOINT +
       "px){" +
-      "winslet-bogo-gift-picker{gap:var(--winslet-bgp-mobile-gap);padding:var(--winslet-bgp-mobile-padding-top) var(--winslet-bgp-mobile-padding-right) var(--winslet-bgp-mobile-padding-bottom) var(--winslet-bgp-mobile-padding-left);}" +
-      "winslet-bogo-gift-picker .winslet-bgp__track{height:var(--winslet-bgp-mobile-thickness);border-radius:var(--winslet-bgp-mobile-roundness);}" +
-      "winslet-bogo-gift-picker .winslet-bgp__fill{border-radius:var(--winslet-bgp-mobile-roundness);}" +
-      "winslet-bogo-gift-picker .winslet-bgp__message,winslet-bogo-gift-picker .winslet-bgp__product-title,winslet-bogo-gift-picker .winslet-bgp__add{font-size:var(--winslet-bgp-mobile-font-size);}" +
+      BAR_TAG +
+      "," +
+      PRODUCTS_TAG +
+      "{padding:var(--winslet-bgp-mobile-padding-top) var(--winslet-bgp-mobile-padding-right) var(--winslet-bgp-mobile-padding-bottom) var(--winslet-bgp-mobile-padding-left);}" +
+      BAR_TAG +
+      "{gap:var(--winslet-bgp-mobile-gap);}" +
+      BAR_TAG +
+      " .winslet-bgp__track{height:var(--winslet-bgp-mobile-thickness);border-radius:var(--winslet-bgp-mobile-roundness);}" +
+      BAR_TAG +
+      " .winslet-bgp__fill{border-radius:var(--winslet-bgp-mobile-roundness);}" +
+      BAR_TAG +
+      " .winslet-bgp__message{font-size:var(--winslet-bgp-mobile-font-size);}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__product-title," +
+      PRODUCTS_TAG +
+      " .winslet-bgp__add{font-size:var(--winslet-bgp-mobile-font-size);}" +
       "}";
     document.head.appendChild(style);
   }
@@ -190,7 +244,30 @@
     }
   }
 
-  class GiftPicker extends HTMLElement {
+  function applySharedStyleVars(el, config) {
+    el.style.setProperty("--winslet-bgp-thickness", config.barThickness + "px");
+    el.style.setProperty("--winslet-bgp-mobile-thickness", config.mobileBarThickness + "px");
+    el.style.setProperty("--winslet-bgp-roundness", config.barRoundness + "px");
+    el.style.setProperty("--winslet-bgp-mobile-roundness", config.mobileBarRoundness + "px");
+    el.style.setProperty("--winslet-bgp-font-size", config.messageFontSize + "px");
+    el.style.setProperty("--winslet-bgp-mobile-font-size", config.mobileMessageFontSize + "px");
+    el.style.setProperty("--winslet-bgp-gap", config.barMessageGap + "px");
+    el.style.setProperty("--winslet-bgp-mobile-gap", config.mobileBarMessageGap + "px");
+    el.style.setProperty("--winslet-bgp-padding-top", config.paddingTop + "px");
+    el.style.setProperty("--winslet-bgp-padding-bottom", config.paddingBottom + "px");
+    el.style.setProperty("--winslet-bgp-padding-left", config.paddingLeft + "px");
+    el.style.setProperty("--winslet-bgp-padding-right", config.paddingRight + "px");
+    el.style.setProperty("--winslet-bgp-mobile-padding-top", config.mobilePaddingTop + "px");
+    el.style.setProperty("--winslet-bgp-mobile-padding-bottom", config.mobilePaddingBottom + "px");
+    el.style.setProperty("--winslet-bgp-mobile-padding-left", config.mobilePaddingLeft + "px");
+    el.style.setProperty("--winslet-bgp-mobile-padding-right", config.mobilePaddingRight + "px");
+    el.style.setProperty("--winslet-bgp-add-bg", config.addButtonColor);
+    el.style.setProperty("--winslet-bgp-add-fg", config.addButtonTextColor);
+  }
+
+  // ---- shared lifecycle base ----
+
+  class BogoWidgetBase extends HTMLElement {
     connectedCallback() {
       this.proxyRoot = this.dataset.proxyRoot || "/apps/winslet";
       this.currency = this.dataset.currency || "";
@@ -211,9 +288,10 @@
       this._onCartEvent = () => this.refreshCart();
       document.addEventListener("cart:updated", this._onCartEvent);
       document.addEventListener("cart:refresh", this._onCartEvent);
-      document.addEventListener("visibilitychange", () => {
+      this._onVisibility = () => {
         if (document.visibilityState === "visible") this.refreshCart();
-      });
+      };
+      document.addEventListener("visibilitychange", this._onVisibility);
 
       this.patchFetch();
     }
@@ -222,24 +300,13 @@
       clearInterval(this.configInterval);
       document.removeEventListener("cart:updated", this._onCartEvent);
       document.removeEventListener("cart:refresh", this._onCartEvent);
+      document.removeEventListener("visibilitychange", this._onVisibility);
       if (this.morphObserver) this.morphObserver.disconnect();
-    }
-
-    buildMarkup(hide) {
-      if (hide) this.style.display = "none";
-      this.innerHTML =
-        '<div class="winslet-bgp__track"><div class="winslet-bgp__fill"></div></div>' +
-        '<p class="winslet-bgp__message"></p>' +
-        '<div class="winslet-bgp__products"></div>';
-      this.trackEl = this.querySelector(".winslet-bgp__track");
-      this.fillEl = this.querySelector(".winslet-bgp__fill");
-      this.messageEl = this.querySelector(".winslet-bgp__message");
-      this.productsEl = this.querySelector(".winslet-bgp__products");
     }
 
     watchForMorph() {
       this.morphObserver = new MutationObserver(() => {
-        if (!this.trackEl || !this.contains(this.trackEl)) {
+        if (this.isDetached()) {
           this.buildMarkup(false);
           if (this.config) {
             this.applyConfig(this.config);
@@ -288,36 +355,6 @@
         });
     }
 
-    applyConfig(config) {
-      this.config = config;
-      if (!config.active) {
-        this.style.display = "none";
-        return;
-      }
-      this.trackEl.style.backgroundColor = config.trackColor;
-      this.trackEl.style.order = config.barPosition === "bottom" ? "2" : "1";
-      this.messageEl.style.order = config.barPosition === "bottom" ? "1" : "2";
-      this.style.setProperty("--winslet-bgp-thickness", config.barThickness + "px");
-      this.style.setProperty("--winslet-bgp-mobile-thickness", config.mobileBarThickness + "px");
-      this.style.setProperty("--winslet-bgp-roundness", config.barRoundness + "px");
-      this.style.setProperty("--winslet-bgp-mobile-roundness", config.mobileBarRoundness + "px");
-      this.style.setProperty("--winslet-bgp-font-size", config.messageFontSize + "px");
-      this.style.setProperty("--winslet-bgp-mobile-font-size", config.mobileMessageFontSize + "px");
-      this.style.setProperty("--winslet-bgp-gap", config.barMessageGap + "px");
-      this.style.setProperty("--winslet-bgp-mobile-gap", config.mobileBarMessageGap + "px");
-      this.style.setProperty("--winslet-bgp-padding-top", config.paddingTop + "px");
-      this.style.setProperty("--winslet-bgp-padding-bottom", config.paddingBottom + "px");
-      this.style.setProperty("--winslet-bgp-padding-left", config.paddingLeft + "px");
-      this.style.setProperty("--winslet-bgp-padding-right", config.paddingRight + "px");
-      this.style.setProperty("--winslet-bgp-mobile-padding-top", config.mobilePaddingTop + "px");
-      this.style.setProperty("--winslet-bgp-mobile-padding-bottom", config.mobilePaddingBottom + "px");
-      this.style.setProperty("--winslet-bgp-mobile-padding-left", config.mobilePaddingLeft + "px");
-      this.style.setProperty("--winslet-bgp-mobile-padding-right", config.mobilePaddingRight + "px");
-      this.style.setProperty("--winslet-bgp-add-bg", config.addButtonColor);
-      this.style.setProperty("--winslet-bgp-add-fg", config.addButtonTextColor);
-      this.style.display = "flex";
-    }
-
     refreshCart() {
       fetch("/cart.js", { headers: { accept: "application/json" } })
         .then((response) => response.json())
@@ -328,6 +365,71 @@
         .catch(() => {
           /* Network hiccup — the widget just keeps its last known state. */
         });
+    }
+  }
+
+  // ---- progress bar widget ----
+
+  class BogoGiftBar extends BogoWidgetBase {
+    buildMarkup(hide) {
+      if (hide) this.style.display = "none";
+      this.innerHTML =
+        '<div class="winslet-bgp__track"><div class="winslet-bgp__fill"></div></div>' +
+        '<p class="winslet-bgp__message"></p>';
+      this.trackEl = this.querySelector(".winslet-bgp__track");
+      this.fillEl = this.querySelector(".winslet-bgp__fill");
+      this.messageEl = this.querySelector(".winslet-bgp__message");
+    }
+
+    isDetached() {
+      return !this.trackEl || !this.contains(this.trackEl);
+    }
+
+    applyConfig(config) {
+      this.config = config;
+      if (!config.active) {
+        this.style.display = "none";
+        return;
+      }
+      this.trackEl.style.backgroundColor = config.trackColor;
+      applySharedStyleVars(this, config);
+      this.style.display = "flex";
+    }
+
+    render(cart) {
+      var config = this.config;
+      if (!config || !config.active) return;
+
+      var result = qualification(config, cart);
+      this.fillEl.style.width = result.percent + "%";
+      this.fillEl.style.backgroundColor = result.qualified ? config.unlockedColor : config.progressColor;
+      this.messageEl.textContent = result.qualified
+        ? config.unlockedMessage
+        : config.lockedMessage.replace(/\{remaining\}/g, String(result.remaining));
+    }
+  }
+
+  // ---- free-gift product picker widget ----
+
+  class BogoGiftProducts extends BogoWidgetBase {
+    buildMarkup(hide) {
+      if (hide) this.style.display = "none";
+      this.innerHTML = '<div class="winslet-bgp__products"></div>';
+      this.productsEl = this.querySelector(".winslet-bgp__products");
+    }
+
+    isDetached() {
+      return !this.productsEl || !this.contains(this.productsEl);
+    }
+
+    applyConfig(config) {
+      this.config = config;
+      if (!config.active) {
+        this.style.display = "none";
+        return;
+      }
+      applySharedStyleVars(this, config);
+      this.style.display = "block";
     }
 
     addToCart(variantId, button) {
@@ -350,21 +452,7 @@
       var config = this.config;
       if (!config || !config.active) return;
 
-      var current = matchedQuantity(config.conditions, cart);
-      var threshold = config.buyQuantity;
-      // threshold+1 is the unit count that earns the first free gift
-      // (see reward-types.ts's progressive-BOGO comment) — always >= 1,
-      // so this is never a divide-by-zero even when threshold is 0
-      // ("free gift with any purchase").
-      var percent = Math.min(100, (current / (threshold + 1)) * 100);
-      var remaining = Math.max(0, threshold + 1 - current);
-      var qualified = current > threshold;
-
-      this.fillEl.style.width = percent + "%";
-      this.fillEl.style.backgroundColor = qualified ? config.unlockedColor : config.progressColor;
-      this.messageEl.textContent = qualified
-        ? config.unlockedMessage
-        : config.lockedMessage.replace(/\{remaining\}/g, String(remaining));
+      var qualified = qualification(config, cart).qualified;
 
       this.productsEl.innerHTML = "";
       (config.products || []).forEach((product) => {
@@ -394,5 +482,6 @@
     }
   }
 
-  customElements.define("winslet-bogo-gift-picker", GiftPicker);
+  customElements.define(BAR_TAG, BogoGiftBar);
+  customElements.define(PRODUCTS_TAG, BogoGiftProducts);
 })();

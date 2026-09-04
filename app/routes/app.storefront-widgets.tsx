@@ -341,16 +341,15 @@ function SnippetModal({
   id,
   heading,
   loaderFile,
-  placementTag,
+  placements,
 }: {
   id: string;
   heading: string;
   loaderFile: string;
-  placementTag: string;
+  placements: Array<{ tag: string; title: string; description: string }>;
 }) {
   const copyToClipboard = useCopyToClipboard();
   const loaderSnippet = buildLoaderSnippet(loaderFile);
-  const placementSnippet = buildPlacementSnippet(placementTag);
 
   return (
     <s-modal id={id} heading={heading}>
@@ -364,14 +363,19 @@ function SnippetModal({
           </s-grid>
         </s-stack>
 
-        <s-stack direction="block" gap="small-200">
-          <s-text type="strong">2. Paste wherever you want it to show</s-text>
-          <s-text color="subdued">Cart drawer, cart page, anywhere — paste it as many times as you like.</s-text>
-          <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="end">
-            <s-text-area label="" value={placementSnippet} readOnly rows={2} />
-            <s-button onClick={() => copyToClipboard(placementSnippet, "Placement tag")}>Copy</s-button>
-          </s-grid>
-        </s-stack>
+        {placements.map((placement, index) => {
+          const placementSnippet = buildPlacementSnippet(placement.tag);
+          return (
+            <s-stack direction="block" gap="small-200" key={placement.tag}>
+              <s-text type="strong">{`${index + 2}. ${placement.title}`}</s-text>
+              <s-text color="subdued">{placement.description}</s-text>
+              <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="end">
+                <s-text-area label="" value={placementSnippet} readOnly rows={2} />
+                <s-button onClick={() => copyToClipboard(placementSnippet, placement.title)}>Copy</s-button>
+              </s-grid>
+            </s-stack>
+          );
+        })}
       </s-stack>
 
       <s-button slot="secondary-actions" commandFor={id} command="--hide">
@@ -387,7 +391,7 @@ function AddToStoreCallout({ modalId }: { modalId: string }) {
       <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
         <s-stack direction="block" gap="small-400">
           <s-text type="strong">Add to your store</s-text>
-          <s-text color="subdued">Two short snippets to paste into your theme&apos;s code.</s-text>
+          <s-text color="subdued">Short snippets to paste into your theme&apos;s code.</s-text>
         </s-stack>
         <s-button variant="primary" commandFor={modalId} command="--show">
           Copy snippet code
@@ -397,7 +401,7 @@ function AddToStoreCallout({ modalId }: { modalId: string }) {
   );
 }
 
-function FreeShippingBarSection({ initial, onBack }: { initial: FreeShippingBarSettings; onBack: () => void }) {
+function FreeShippingBarSection({ initial }: { initial: FreeShippingBarSettings }) {
   const actionData = useActionData() as ActionData | undefined;
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -420,10 +424,6 @@ function FreeShippingBarSection({ initial, onBack }: { initial: FreeShippingBarS
   return (
     <s-section heading="Free shipping bar">
       <s-stack direction="block" gap="base">
-        <s-button variant="tertiary" icon="arrow-left" onClick={onBack}>
-          Storefront
-        </s-button>
-
         <s-paragraph>
           Shows live progress toward whichever active campaign has a free-shipping minimum — always in sync with the
           real discount, no manual re-entry.
@@ -512,13 +512,19 @@ function FreeShippingBarSection({ initial, onBack }: { initial: FreeShippingBarS
         id="free-shipping-snippet-modal"
         heading="Free shipping bar — snippet code"
         loaderFile="free-shipping-bar.js"
-        placementTag="winslet-free-shipping-bar"
+        placements={[
+          {
+            tag: "winslet-free-shipping-bar",
+            title: "Paste wherever you want it to show",
+            description: "Cart drawer, cart page, anywhere — paste it as many times as you like.",
+          },
+        ]}
       />
     </s-section>
   );
 }
 
-function BogoGiftSection({ initial, onBack }: { initial: BogoGiftSettings; onBack: () => void }) {
+function BogoGiftSection({ initial }: { initial: BogoGiftSettings }) {
   const actionData = useActionData() as ActionData | undefined;
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -540,10 +546,6 @@ function BogoGiftSection({ initial, onBack }: { initial: BogoGiftSettings; onBac
   return (
     <s-section heading="Buy X get Y free — gift picker">
       <s-stack direction="block" gap="base">
-        <s-button variant="tertiary" icon="arrow-left" onClick={onBack}>
-          Storefront
-        </s-button>
-
         <s-paragraph>
           Shows live progress toward whichever active campaign has a free-gift pool, with an Add button for each
           eligible product — enabled only once the shopper has actually qualified.
@@ -628,7 +630,18 @@ function BogoGiftSection({ initial, onBack }: { initial: BogoGiftSettings; onBac
         id="bogo-gift-snippet-modal"
         heading="Buy X get Y free — snippet code"
         loaderFile="bogo-gift-picker.js"
-        placementTag="winslet-bogo-gift-picker"
+        placements={[
+          {
+            tag: "winslet-bogo-gift-bar",
+            title: "Progress bar",
+            description: "Shows progress toward the free gift — paste wherever you want the bar to show.",
+          },
+          {
+            tag: "winslet-bogo-gift-products",
+            title: "Free gift products",
+            description: "Shows the free-gift product cards with Add buttons — paste wherever shoppers should pick their gift.",
+          },
+        ]}
       />
     </s-section>
   );
@@ -638,28 +651,50 @@ type WidgetKey = "freeShippingBar" | "bogoGift";
 
 function WidgetCard({
   icon,
+  iconBackground,
   title,
   description,
   onClick,
   disabled,
 }: {
   icon: "cart-discount" | "gift-card" | "megaphone";
+  iconBackground: string;
   title: string;
   description: string;
   onClick?: () => void;
   disabled?: boolean;
 }) {
   return (
-    <s-box borderWidth="base" borderColor="subdued" borderRadius="base" overflow="hidden">
-      <s-clickable disabled={disabled} onClick={onClick} accessibilityLabel={title}>
-        <s-box padding="base">
-          <s-stack direction="block" gap="small">
+    <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+      <s-stack direction="block" gap="base">
+        <s-stack direction="inline" gap="base" alignItems="start">
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              minWidth: "40px",
+              borderRadius: "8px",
+              padding: "8px",
+              background: iconBackground,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxSizing: "border-box",
+            }}
+          >
             <s-icon type={icon} tone="neutral" />
+          </div>
+
+          <s-stack direction="block" gap="small-400">
             <s-text type="strong">{title}</s-text>
             <s-text color="subdued">{description}</s-text>
           </s-stack>
-        </s-box>
-      </s-clickable>
+        </s-stack>
+
+        <s-button variant={disabled ? "secondary" : "primary"} disabled={disabled} onClick={onClick} inlineSize="fill">
+          {disabled ? "Coming soon" : "Add"}
+        </s-button>
+      </s-stack>
     </s-box>
   );
 }
@@ -671,7 +706,10 @@ export default function StorefrontWidgets() {
   if (selected === "freeShippingBar") {
     return (
       <s-page heading="Storefront" inlineSize="small">
-        <FreeShippingBarSection initial={freeShippingBar} onBack={() => setSelected(null)} />
+        <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
+          Storefront
+        </s-button>
+        <FreeShippingBarSection initial={freeShippingBar} />
       </s-page>
     );
   }
@@ -679,7 +717,10 @@ export default function StorefrontWidgets() {
   if (selected === "bogoGift") {
     return (
       <s-page heading="Storefront" inlineSize="small">
-        <BogoGiftSection initial={bogoGift} onBack={() => setSelected(null)} />
+        <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
+          Storefront
+        </s-button>
+        <BogoGiftSection initial={bogoGift} />
       </s-page>
     );
   }
@@ -693,17 +734,25 @@ export default function StorefrontWidgets() {
           <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
             <WidgetCard
               icon="cart-discount"
+              iconBackground="#d9f2e6"
               title="Free shipping bar"
               description="Live progress toward your free-shipping threshold."
               onClick={() => setSelected("freeShippingBar")}
             />
             <WidgetCard
               icon="gift-card"
+              iconBackground="#dbe9fb"
               title="Buy X get Y free"
               description="Gift picker with an Add button, enabled once qualified."
               onClick={() => setSelected("bogoGift")}
             />
-            <WidgetCard icon="megaphone" title="Announcement bar" description="Coming soon." disabled />
+            <WidgetCard
+              icon="megaphone"
+              iconBackground="#f1f2f3"
+              title="Announcement bar"
+              description="Coming soon."
+              disabled
+            />
           </s-grid>
         </s-stack>
       </s-section>
