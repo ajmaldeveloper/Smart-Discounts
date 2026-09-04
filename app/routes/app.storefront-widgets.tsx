@@ -58,6 +58,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const nearThresholdPercentRaw = String(formData.get("nearThresholdPercent") ?? "").trim();
   const progressMessage = String(formData.get("progressMessage") ?? "").trim();
   const completeMessage = String(formData.get("completeMessage") ?? "").trim();
+  const barPosition = formData.get("barPosition") === "bottom" ? "bottom" : "top";
 
   for (const [label, value] of [
     ["Background", trackColor],
@@ -128,6 +129,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     mobilePaddingBottom: pixelValues.mobilePaddingBottom,
     mobilePaddingLeft: pixelValues.mobilePaddingLeft,
     mobilePaddingRight: pixelValues.mobilePaddingRight,
+    barPosition,
   };
 
   await db.shop.update({
@@ -260,6 +262,15 @@ export default function StorefrontWidgets() {
           <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
             <s-stack direction="block" gap="base">
               <s-text type="strong">Style</s-text>
+
+              <s-select
+                label="Layout"
+                value={draft.barPosition}
+                onChange={(event: ControlEvent) => update("barPosition", readValue(event) === "bottom" ? "bottom" : "top")}
+              >
+                <s-option value="top">Bar on top, message below</s-option>
+                <s-option value="bottom">Message on top, bar below</s-option>
+              </s-select>
 
               <s-grid gridTemplateColumns="repeat(2, minmax(160px, 1fr))" gap="base">
                 <s-color-field

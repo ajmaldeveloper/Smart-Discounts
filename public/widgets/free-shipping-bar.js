@@ -75,17 +75,24 @@
     var style = document.createElement("style");
     style.id = STYLE_ELEMENT_ID;
     style.textContent =
-      "winslet-free-shipping-bar{padding:var(--winslet-fsb-padding-top) var(--winslet-fsb-padding-right) var(--winslet-fsb-padding-bottom) var(--winslet-fsb-padding-left);}" +
+      // display:flex + flex-direction:column lets barPosition reorder
+      // the track/message via each element's own `order` style
+      // (set per-instance in applyConfig) without touching the DOM —
+      // the flex container's own `gap` provides the space between
+      // them regardless of which one is visually first, unlike a
+      // margin on one specific element which would land on the wrong
+      // side once the order flips.
+      "winslet-free-shipping-bar{display:flex;flex-direction:column;gap:var(--winslet-fsb-gap);padding:var(--winslet-fsb-padding-top) var(--winslet-fsb-padding-right) var(--winslet-fsb-padding-bottom) var(--winslet-fsb-padding-left);}" +
       "winslet-free-shipping-bar .winslet-fsb__track{height:var(--winslet-fsb-thickness);border-radius:var(--winslet-fsb-roundness);overflow:hidden;}" +
       "winslet-free-shipping-bar .winslet-fsb__fill{height:100%;width:0%;border-radius:var(--winslet-fsb-roundness);box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);transition:width 0.3s ease,background-color 0.3s ease;}" +
-      "winslet-free-shipping-bar .winslet-fsb__message{margin:var(--winslet-fsb-gap) 0 0;font-size:var(--winslet-fsb-font-size);text-align:center;}" +
+      "winslet-free-shipping-bar .winslet-fsb__message{margin:0;font-size:var(--winslet-fsb-font-size);text-align:center;}" +
       "@media (max-width:" +
       MOBILE_BREAKPOINT +
       "px){" +
-      "winslet-free-shipping-bar{padding:var(--winslet-fsb-mobile-padding-top) var(--winslet-fsb-mobile-padding-right) var(--winslet-fsb-mobile-padding-bottom) var(--winslet-fsb-mobile-padding-left);}" +
+      "winslet-free-shipping-bar{gap:var(--winslet-fsb-mobile-gap);padding:var(--winslet-fsb-mobile-padding-top) var(--winslet-fsb-mobile-padding-right) var(--winslet-fsb-mobile-padding-bottom) var(--winslet-fsb-mobile-padding-left);}" +
       "winslet-free-shipping-bar .winslet-fsb__track{height:var(--winslet-fsb-mobile-thickness);border-radius:var(--winslet-fsb-mobile-roundness);}" +
       "winslet-free-shipping-bar .winslet-fsb__fill{border-radius:var(--winslet-fsb-mobile-roundness);}" +
-      "winslet-free-shipping-bar .winslet-fsb__message{margin-top:var(--winslet-fsb-mobile-gap);font-size:var(--winslet-fsb-mobile-font-size);}" +
+      "winslet-free-shipping-bar .winslet-fsb__message{font-size:var(--winslet-fsb-mobile-font-size);}" +
       "}";
     document.head.appendChild(style);
   }
@@ -276,7 +283,9 @@
       this.style.setProperty("--winslet-fsb-mobile-padding-bottom", config.mobilePaddingBottom + "px");
       this.style.setProperty("--winslet-fsb-mobile-padding-left", config.mobilePaddingLeft + "px");
       this.style.setProperty("--winslet-fsb-mobile-padding-right", config.mobilePaddingRight + "px");
-      this.style.display = "block";
+      this.trackEl.style.order = config.barPosition === "bottom" ? "2" : "1";
+      this.messageEl.style.order = config.barPosition === "bottom" ? "1" : "2";
+      this.style.display = "flex";
     }
 
     refreshCart() {

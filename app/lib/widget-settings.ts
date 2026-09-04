@@ -73,6 +73,9 @@ export interface FreeShippingBarSettings {
   mobilePaddingBottom: number;
   mobilePaddingLeft: number;
   mobilePaddingRight: number;
+  // Stacking order of the two rows — "top" (default) shows the bar
+  // above the message, "bottom" swaps them (message above the bar).
+  barPosition: "top" | "bottom";
 }
 
 export interface WidgetSettings {
@@ -103,6 +106,7 @@ const DEFAULT_FREE_SHIPPING_BAR: FreeShippingBarSettings = {
   mobilePaddingBottom: 8,
   mobilePaddingLeft: 16,
   mobilePaddingRight: 16,
+  barPosition: "top",
 };
 
 const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
@@ -157,6 +161,7 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
       mobilePaddingBottom: normalizePixels(barRecord.mobilePaddingBottom, DEFAULT_FREE_SHIPPING_BAR.mobilePaddingBottom, 200),
       mobilePaddingLeft: normalizePixels(barRecord.mobilePaddingLeft, DEFAULT_FREE_SHIPPING_BAR.mobilePaddingLeft, 200),
       mobilePaddingRight: normalizePixels(barRecord.mobilePaddingRight, DEFAULT_FREE_SHIPPING_BAR.mobilePaddingRight, 200),
+      barPosition: barRecord.barPosition === "bottom" ? "bottom" : "top",
     },
   };
 }

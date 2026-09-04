@@ -28,6 +28,7 @@ describe("normalizeWidgetSettings", () => {
         mobilePaddingBottom: 2,
         mobilePaddingLeft: 3,
         mobilePaddingRight: 4,
+        barPosition: "bottom",
       },
     });
 
@@ -55,6 +56,7 @@ describe("normalizeWidgetSettings", () => {
       mobilePaddingBottom: 2,
       mobilePaddingLeft: 3,
       mobilePaddingRight: 4,
+      barPosition: "bottom",
     });
   });
 
@@ -98,7 +100,18 @@ describe("normalizeWidgetSettings", () => {
       expect(freeShippingBar.mobileMessageFontSize).toBe(14);
       expect(freeShippingBar.paddingTop).toBe(8);
       expect(freeShippingBar.paddingLeft).toBe(16);
+      expect(freeShippingBar.barPosition).toBe("top");
     }
+  });
+
+  it("rejects an invalid barPosition, falling back to top", () => {
+    const settings = normalizeWidgetSettings({ freeShippingBar: { barPosition: "sideways" } });
+    expect(settings.freeShippingBar.barPosition).toBe("top");
+  });
+
+  it("accepts barPosition bottom", () => {
+    const settings = normalizeWidgetSettings({ freeShippingBar: { barPosition: "bottom" } });
+    expect(settings.freeShippingBar.barPosition).toBe("bottom");
   });
 
   it("accepts a short 3-digit hex color", () => {
