@@ -14,10 +14,10 @@
  *     fixed-length cycle (repeatHours) forever, anchored at that end
  *     time.
  *   - "daily"/"weekly": counts down to the next occurrence of a fixed
- *     UTC time-of-day / UTC weekday+time. Deliberately UTC rather than
- *     each shopper's own local time, so every visitor sees the SAME
- *     countdown at any given moment instead of their own private timer
- *     starting fresh on first view.
+ *     time-of-day / weekday+time, read against the SHOPPER'S OWN
+ *     device clock (not the store's timezone or a fixed UTC instant)
+ *     — e.g. "resets daily at 00:00" means each visitor's own local
+ *     midnight, whatever timezone they're browsing from.
  */
 (function () {
   var TAG = "winslet-countdown-timer";
@@ -76,16 +76,16 @@
     };
   }
 
-  function utcTimeToday(hhmm, now) {
+  function localTimeToday(hhmm, now) {
     var parts = hhmm.split(":");
     var hour = Number(parts[0]) || 0;
     var minute = Number(parts[1]) || 0;
     var nowDate = new Date(now);
-    return Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), hour, minute, 0, 0);
+    return new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), hour, minute, 0, 0).getTime();
   }
 
   function nextDailyTarget(hhmm, now) {
-    var today = utcTimeToday(hhmm, now);
+    var today = localTimeToday(hhmm, now);
     return today > now ? today : today + 86400000;
   }
 
@@ -94,9 +94,12 @@
     var hour = Number(parts[0]) || 0;
     var minute = Number(parts[1]) || 0;
     var nowDate = new Date(now);
-    var currentDay = nowDate.getUTCDay();
+    var currentDay = nowDate.getDay();
     var daysUntil = (weekday - currentDay + 7) % 7;
-    var candidate = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate() + daysUntil, hour, minute, 0, 0);
+    // The Date constructor normalizes an out-of-range day (e.g. day 34
+    // in a 30-day month) into the correct following month/year, so
+    // this rolls over calendar boundaries correctly without extra math.
+    var candidate = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() + daysUntil, hour, minute, 0, 0).getTime();
     return candidate > now ? candidate : candidate + 7 * 86400000;
   }
 

@@ -1599,8 +1599,8 @@ function ShopTimeFields({ label, value, onChange }: { label: string; value: stri
   );
 }
 
-/** A 24-hour hour/minute picker for the daily/weekly reset time — deliberately UTC (labeled as such) so every shopper sees the same countdown, not each visitor's own local time. */
-function UtcTimeField({ label, value, onChange }: { label: string; value: string; onChange: (next: string) => void }) {
+/** A 24-hour hour/minute picker for the daily/weekly reset time — read against each shopper's own local device clock, not the store's timezone. */
+function LocalTimeField({ label, value, onChange }: { label: string; value: string; onChange: (next: string) => void }) {
   const [hour, minute] = (value || "00:00").split(":");
 
   return (
@@ -1714,7 +1714,14 @@ function CountdownTimerSection({ initial, shopTimezone }: { initial: CountdownTi
             )}
 
             {draft.restartMode === "daily" && (
-              <UtcTimeField label="Resets daily at (UTC)" value={draft.dailyResetTime} onChange={(v) => update("dailyResetTime", v)} />
+              <LocalTimeField
+                label="Resets daily at"
+                value={draft.dailyResetTime}
+                onChange={(v) => update("dailyResetTime", v)}
+              />
+            )}
+            {draft.restartMode === "daily" && (
+              <s-text color="subdued">Based on each shopper&apos;s own device clock, not your store&apos;s timezone.</s-text>
             )}
 
             {draft.restartMode === "weekly" && (
@@ -1730,7 +1737,8 @@ function CountdownTimerSection({ initial, shopTimezone }: { initial: CountdownTi
                     </s-option>
                   ))}
                 </s-select>
-                <UtcTimeField label="Resets at (UTC)" value={draft.weeklyResetTime} onChange={(v) => update("weeklyResetTime", v)} />
+                <LocalTimeField label="Resets at" value={draft.weeklyResetTime} onChange={(v) => update("weeklyResetTime", v)} />
+                <s-text color="subdued">Based on each shopper&apos;s own device clock, not your store&apos;s timezone.</s-text>
               </>
             )}
 

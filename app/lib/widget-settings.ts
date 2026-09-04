@@ -169,25 +169,26 @@ export interface AnnouncementBarSettings {
  *     is off, it just stops (showing expiredMessage, or hiding
  *     entirely if that's blank). If on, once endAt passes it keeps
  *     repeating a cycle of repeatHours, forever, anchored at endAt.
- *   - "daily"/"weekly": counts down to the next occurrence of a
- *     fixed UTC time-of-day (dailyResetTime) or UTC weekday+time
- *     (weeklyResetDay/weeklyResetTime) — deliberately UTC, not each
- *     shopper's own local time, so every visitor sees the SAME
- *     countdown at any given moment rather than their own private
- *     timer starting from first view.
+ *   - "daily"/"weekly": counts down to the next occurrence of a fixed
+ *     time-of-day (dailyResetTime) or weekday+time (weeklyResetDay/
+ *     weeklyResetTime), read against each SHOPPER'S OWN device clock —
+ *     e.g. "resets daily at 00:00" means their own local midnight,
+ *     whatever timezone they're browsing from, not the store's.
  * All the actual "what time is it, how much is left" math happens in
  * countdown-timer.js — this is just the merchant's configuration.
  */
 export interface CountdownTimerSettings {
   enabled: boolean;
   restartMode: "fixed" | "daily" | "weekly";
-  // ISO 8601 UTC datetime.
+  // ISO 8601 UTC datetime — the one absolute instant here, since
+  // "fixed" is a real point in time rather than a repeating local
+  // clock reading.
   endAt: string;
   restartAfterEnd: boolean;
   repeatHours: number;
-  // "HH:MM", UTC, 24-hour.
+  // "HH:MM", read against the shopper's own local device clock.
   dailyResetTime: string;
-  // 0 (Sunday) – 6 (Saturday), UTC.
+  // 0 (Sunday) – 6 (Saturday), the shopper's own local weekday.
   weeklyResetDay: number;
   weeklyResetTime: string;
   message: string;
