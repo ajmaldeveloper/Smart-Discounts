@@ -15,11 +15,6 @@ function readValue(event: ControlEvent): string {
   return String(target?.value ?? "");
 }
 
-type OverlayElement = HTMLElement & { hideOverlay?: () => void };
-function hideOverlay(id: string) {
-  (document.getElementById(id) as OverlayElement | null)?.hideOverlay?.();
-}
-
 const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
 
 // Hosted from our own app (not the theme extension's asset pipeline)
@@ -28,8 +23,19 @@ const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
 // wherever a "target: body" app embed happens to land in the DOM.
 const SNIPPET_SCRIPT_URL = "https://winslet-smart-discounts.fly.dev/widgets/free-shipping-bar.js";
 
-function buildSnippet(): string {
-  return `<script src="${SNIPPET_SCRIPT_URL}" defer></script>\n<winslet-free-shipping-bar data-proxy-root="/apps/winslet" data-currency="{{ cart.currency.iso_code }}"></winslet-free-shipping-bar>`;
+// Split in two deliberately: a cart drawer's own AJAX refresh usually
+// replaces its markup via innerHTML, and browsers never execute a
+// <script> tag inserted that way — only a real full-page load does.
+// The loader script only ever needs to run once (it just registers
+// the custom element), so it goes in theme.liquid where a real page
+// load always executes it; the placement tag is pure HTML with no
+// <script> of its own, so it's safe to pasted anywhere, including
+// somewhere that gets AJAX-refreshed repeatedly.
+function buildLoaderSnippet(): string {
+  return `<script src="${SNIPPET_SCRIPT_URL}" defer></script>`;
+}
+function buildPlacementSnippet(): string {
+  return `<winslet-free-shipping-bar data-proxy-root="/apps/winslet" data-currency="{{ cart.currency.iso_code }}"></winslet-free-shipping-bar>`;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -119,10 +125,10 @@ export default function StorefrontWidgets() {
     progressMessage !== freeShippingBar.progressMessage ||
     completeMessage !== freeShippingBar.completeMessage;
 
-  const copySnippet = async () => {
+  const copyToClipboard = async (text: string, label: string) => {
     try {
-      await navigator.clipboard.writeText(buildSnippet());
-      shopify.toast.show("Snippet copied.", { duration: 2000 });
+      await navigator.clipboard.writeText(text);
+      shopify.toast.show(`${label} copied.`, { duration: 2000 });
     } catch {
       shopify.toast.show("Couldn't copy — select and copy the code manually.", { isError: true });
     }
@@ -227,25 +233,32 @@ export default function StorefrontWidgets() {
 
       <s-modal id="storefront-widget-snippet-modal" heading="Free shipping bar — snippet code">
         <s-stack direction="block" gap="base">
-          <s-paragraph>
-            Paste this into your theme&apos;s code editor at the exact spot you want the bar to show — for example inside
-            your cart drawer&apos;s snippet file, right below the cart heading.
-          </s-paragraph>
-          <s-text-area label="Snippet" value={buildSnippet()} readOnly rows={3} />
+          <s-stack direction="block" gap="small-200">
+            <s-text type="strong">1. Paste once in theme.liquid</s-text>
+            <s-text color="subdued">
+              Anywhere before &lt;/body&gt;. Loads the bar&apos;s code for the whole site — you only do this once, ever.
+            </s-text>
+            <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="end">
+              <s-text-area label="" value={buildLoaderSnippet()} readOnly rows={2} />
+              <s-button onClick={() => copyToClipboard(buildLoaderSnippet(), "Loader script")}>Copy</s-button>
+            </s-grid>
+          </s-stack>
+
+          <s-stack direction="block" gap="small-200">
+            <s-text type="strong">2. Paste wherever you want it to show</s-text>
+            <s-text color="subdued">
+              The cart drawer, the cart page, above the footer — paste this again anywhere you want another copy of
+              the bar. Plain HTML, no script tag, so it works even inside a cart drawer that re-renders via AJAX.
+            </s-text>
+            <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="end">
+              <s-text-area label="" value={buildPlacementSnippet()} readOnly rows={2} />
+              <s-button onClick={() => copyToClipboard(buildPlacementSnippet(), "Placement tag")}>Copy</s-button>
+            </s-grid>
+          </s-stack>
         </s-stack>
 
         <s-button slot="secondary-actions" commandFor="storefront-widget-snippet-modal" command="--hide">
           Close
-        </s-button>
-        <s-button
-          slot="primary-action"
-          variant="primary"
-          onClick={() => {
-            copySnippet();
-            hideOverlay("storefront-widget-snippet-modal");
-          }}
-        >
-          Copy code
         </s-button>
       </s-modal>
     </s-page>

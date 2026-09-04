@@ -10,6 +10,19 @@
  * wherever its <winslet-free-shipping-bar> tag is placed — no special
  * positioning of its own, so it can never fight with a theme's header.
  *
+ * Loaded via a plain <script src="..."> tag pasted ONCE into
+ * theme.liquid — real full-page loads always execute a <script> tag
+ * regardless of where it sits, so this only needs to run once ever to
+ * register the <winslet-free-shipping-bar> custom element for the
+ * whole site. The element TAG ITSELF is pasted separately, wherever
+ * the merchant wants the bar to show (the cart drawer, the cart page,
+ * anywhere) — that placement snippet is pure HTML, no <script> of its
+ * own, which matters because a cart drawer's own AJAX refresh usually
+ * replaces its markup via innerHTML, and browsers never execute a
+ * <script> tag inserted that way. A plain element tag doesn't have
+ * that problem: the browser auto-upgrades any matching custom element
+ * the moment it appears in the DOM, no matter how it got there.
+ *
  * Everything it needs (the real campaign threshold, the merchant's
  * chosen colors/messages) comes live from the App Proxy at connect
  * time — nothing is hand-typed into the theme, so it can never drift
@@ -31,6 +44,15 @@
 
   var CONFIG_REFRESH_MS = 60000;
   var CART_ENDPOINT_PATTERN = /\/cart\/(add|update|change|clear)(\.js)?(\?|$)/;
+  // Cached OUTSIDE the class, shared by every instance on the page —
+  // a theme's cart drawer commonly re-renders its own markup via AJAX
+  // (innerHTML replacement) on every cart change, which destroys and
+  // recreates this element each time. Without a shared cache, each
+  // fresh instance would start hidden again and wait on a brand-new
+  // fetch before showing anything, flashing invisible on every drawer
+  // open. With it, a freshly (re)connected instance renders instantly
+  // from whatever the page already knows, then quietly revalidates.
+  var sharedConfig = null;
 
   function formatRemaining(amount, metric, currency) {
     if (metric === "cart.quantity") {
@@ -63,6 +85,12 @@
       this.messageEl = this.querySelector(".winslet-fsb__message");
       this.style.cssText += "display:none;padding:8px 16px;";
 
+      if (sharedConfig) {
+        // Already known from an earlier instance on this page — show
+        // it immediately, no fetch-and-wait, then revalidate quietly.
+        this.applyConfig(sharedConfig);
+        this.refreshCart();
+      }
       this.loadConfig();
       this.configInterval = setInterval(() => this.loadConfig(), CONFIG_REFRESH_MS);
 
@@ -106,18 +134,23 @@
       fetch(this.proxyRoot + "/free-shipping", { headers: { accept: "application/json" } })
         .then((response) => response.json())
         .then((config) => {
-          this.config = config;
-          if (!config.active) {
-            this.style.display = "none";
-            return;
-          }
-          this.trackEl.style.backgroundColor = config.trackColor;
-          this.style.display = "block";
-          this.refreshCart();
+          sharedConfig = config;
+          this.applyConfig(config);
+          if (config.active) this.refreshCart();
         })
         .catch(() => {
           /* Network hiccup — keep showing whatever config we already have. */
         });
+    }
+
+    applyConfig(config) {
+      this.config = config;
+      if (!config.active) {
+        this.style.display = "none";
+        return;
+      }
+      this.trackEl.style.backgroundColor = config.trackColor;
+      this.style.display = "block";
     }
 
     refreshCart() {
