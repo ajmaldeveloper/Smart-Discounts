@@ -397,7 +397,7 @@ function AddToStoreCallout({ modalId }: { modalId: string }) {
   );
 }
 
-function FreeShippingBarSection({ initial }: { initial: FreeShippingBarSettings }) {
+function FreeShippingBarSection({ initial, onBack }: { initial: FreeShippingBarSettings; onBack: () => void }) {
   const actionData = useActionData() as ActionData | undefined;
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -420,6 +420,10 @@ function FreeShippingBarSection({ initial }: { initial: FreeShippingBarSettings 
   return (
     <s-section heading="Free shipping bar">
       <s-stack direction="block" gap="base">
+        <s-button variant="tertiary" icon="arrow-left" onClick={onBack}>
+          Storefront
+        </s-button>
+
         <s-paragraph>
           Shows live progress toward whichever active campaign has a free-shipping minimum — always in sync with the
           real discount, no manual re-entry.
@@ -514,7 +518,7 @@ function FreeShippingBarSection({ initial }: { initial: FreeShippingBarSettings 
   );
 }
 
-function BogoGiftSection({ initial }: { initial: BogoGiftSettings }) {
+function BogoGiftSection({ initial, onBack }: { initial: BogoGiftSettings; onBack: () => void }) {
   const actionData = useActionData() as ActionData | undefined;
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -536,6 +540,10 @@ function BogoGiftSection({ initial }: { initial: BogoGiftSettings }) {
   return (
     <s-section heading="Buy X get Y free — gift picker">
       <s-stack direction="block" gap="base">
+        <s-button variant="tertiary" icon="arrow-left" onClick={onBack}>
+          Storefront
+        </s-button>
+
         <s-paragraph>
           Shows live progress toward whichever active campaign has a free-gift pool, with an Add button for each
           eligible product — enabled only once the shopper has actually qualified.
@@ -626,13 +634,79 @@ function BogoGiftSection({ initial }: { initial: BogoGiftSettings }) {
   );
 }
 
+type WidgetKey = "freeShippingBar" | "bogoGift";
+
+function WidgetCard({
+  icon,
+  title,
+  description,
+  onClick,
+  disabled,
+}: {
+  icon: "cart-discount" | "gift-card" | "megaphone";
+  title: string;
+  description: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <s-box borderWidth="base" borderColor="subdued" borderRadius="base" overflow="hidden">
+      <s-clickable disabled={disabled} onClick={onClick} accessibilityLabel={title}>
+        <s-box padding="base">
+          <s-stack direction="block" gap="small">
+            <s-icon type={icon} tone="neutral" />
+            <s-text type="strong">{title}</s-text>
+            <s-text color="subdued">{description}</s-text>
+          </s-stack>
+        </s-box>
+      </s-clickable>
+    </s-box>
+  );
+}
+
 export default function StorefrontWidgets() {
   const { freeShippingBar, bogoGift } = useLoaderData<typeof loader>();
+  const [selected, setSelected] = useState<WidgetKey | null>(null);
+
+  if (selected === "freeShippingBar") {
+    return (
+      <s-page heading="Storefront" inlineSize="small">
+        <FreeShippingBarSection initial={freeShippingBar} onBack={() => setSelected(null)} />
+      </s-page>
+    );
+  }
+
+  if (selected === "bogoGift") {
+    return (
+      <s-page heading="Storefront" inlineSize="small">
+        <BogoGiftSection initial={bogoGift} onBack={() => setSelected(null)} />
+      </s-page>
+    );
+  }
 
   return (
     <s-page heading="Storefront" inlineSize="small">
-      <FreeShippingBarSection initial={freeShippingBar} />
-      <BogoGiftSection initial={bogoGift} />
+      <s-section heading="Widgets">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>Pick a widget to style it and grab its copy-paste snippet.</s-paragraph>
+
+          <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
+            <WidgetCard
+              icon="cart-discount"
+              title="Free shipping bar"
+              description="Live progress toward your free-shipping threshold."
+              onClick={() => setSelected("freeShippingBar")}
+            />
+            <WidgetCard
+              icon="gift-card"
+              title="Buy X get Y free"
+              description="Gift picker with an Add button, enabled once qualified."
+              onClick={() => setSelected("bogoGift")}
+            />
+            <WidgetCard icon="megaphone" title="Announcement bar" description="Coming soon." disabled />
+          </s-grid>
+        </s-stack>
+      </s-section>
     </s-page>
   );
 }
