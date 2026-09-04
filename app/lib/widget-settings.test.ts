@@ -165,3 +165,75 @@ describe("normalizeWidgetSettings", () => {
     expect(settings.bogoGift.barPosition).toBe("top");
   });
 });
+
+describe("normalizeWidgetSettings — announcementBar", () => {
+  it("normalizes a full valid announcementBar config", () => {
+    const settings = normalizeWidgetSettings({
+      announcementBar: {
+        enabled: true,
+        message: "20% off everything today!",
+        ctaLabel: "Shop now",
+        ctaUrl: "https://example.com/sale",
+        dismissible: false,
+        backgroundColor: "#123456",
+        textColor: "#abcdef",
+        messageFontSize: 18,
+        mobileMessageFontSize: 12,
+        paddingTop: 20,
+        paddingBottom: 20,
+        paddingLeft: 24,
+        paddingRight: 24,
+        mobilePaddingTop: 10,
+        mobilePaddingBottom: 10,
+        mobilePaddingLeft: 8,
+        mobilePaddingRight: 8,
+      },
+    });
+
+    expect(settings.announcementBar).toEqual({
+      enabled: true,
+      message: "20% off everything today!",
+      ctaLabel: "Shop now",
+      ctaUrl: "https://example.com/sale",
+      dismissible: false,
+      backgroundColor: "#123456",
+      textColor: "#abcdef",
+      messageFontSize: 18,
+      mobileMessageFontSize: 12,
+      paddingTop: 20,
+      paddingBottom: 20,
+      paddingLeft: 24,
+      paddingRight: 24,
+      mobilePaddingTop: 10,
+      mobilePaddingBottom: 10,
+      mobilePaddingLeft: 8,
+      mobilePaddingRight: 8,
+    });
+  });
+
+  it("returns defaults for a missing/malformed value", () => {
+    const settings = normalizeWidgetSettings({ announcementBar: "garbage" });
+
+    expect(settings.announcementBar.enabled).toBe(false);
+    expect(settings.announcementBar.dismissible).toBe(true);
+    expect(settings.announcementBar.backgroundColor).toBe("#1a1a1a");
+    expect(settings.announcementBar.textColor).toBe("#ffffff");
+    expect(settings.announcementBar.ctaUrl).toBe("");
+  });
+
+  it("drops a ctaUrl that isn't http(s) or a relative path (e.g. javascript:)", () => {
+    const settings = normalizeWidgetSettings({
+      announcementBar: { ctaUrl: "javascript:alert(1)" },
+    });
+
+    expect(settings.announcementBar.ctaUrl).toBe("");
+  });
+
+  it("accepts a relative ctaUrl", () => {
+    const settings = normalizeWidgetSettings({
+      announcementBar: { ctaUrl: "/collections/sale" },
+    });
+
+    expect(settings.announcementBar.ctaUrl).toBe("/collections/sale");
+  });
+});

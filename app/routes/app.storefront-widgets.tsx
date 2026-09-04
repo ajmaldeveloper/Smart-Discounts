@@ -6,7 +6,13 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { normalizeWidgetSettings, type BarSizingSettings, type BogoGiftSettings, type FreeShippingBarSettings } from "../lib/widget-settings";
+import {
+  normalizeWidgetSettings,
+  type AnnouncementBarSettings,
+  type BarSizingSettings,
+  type BogoGiftSettings,
+  type FreeShippingBarSettings,
+} from "../lib/widget-settings";
 
 type ActionData = { error?: string; notice?: string };
 type ControlEvent = { target: EventTarget | null; currentTarget: EventTarget | null };
@@ -34,8 +40,9 @@ const WIDGETS_BASE_URL = "https://winslet-smart-discounts.fly.dev/widgets";
 function buildLoaderSnippet(file: string): string {
   return `<script src="${WIDGETS_BASE_URL}/${file}" defer></script>`;
 }
-function buildPlacementSnippet(tag: string, extraAttrs = ""): string {
-  return `<${tag} data-proxy-root="/apps/winslet" data-currency="{{ cart.currency.iso_code }}"${extraAttrs}></${tag}>`;
+function buildPlacementSnippet(tag: string, includeCurrency = true): string {
+  const currencyAttr = includeCurrency ? ` data-currency="{{ cart.currency.iso_code }}"` : "";
+  return `<${tag} data-proxy-root="/apps/winslet"${currencyAttr}></${tag}>`;
 }
 
 const PIXEL_FIELDS = [
@@ -89,22 +96,119 @@ function parseBarSizing(formData: FormData): BarSizingSettings | { error: string
   };
 }
 
+const ANNOUNCEMENT_PIXEL_FIELDS = [
+  ["messageFontSize", "Message font size", 48],
+  ["mobileMessageFontSize", "Mobile message font size", 48],
+  ["paddingTop", "Top padding", 200],
+  ["paddingBottom", "Bottom padding", 200],
+  ["paddingLeft", "Left padding", 200],
+  ["paddingRight", "Right padding", 200],
+  ["mobilePaddingTop", "Mobile top padding", 200],
+  ["mobilePaddingBottom", "Mobile bottom padding", 200],
+  ["mobilePaddingLeft", "Mobile left padding", 200],
+  ["mobilePaddingRight", "Mobile right padding", 200],
+] as const;
+
+/** The announcement bar has no bar to size (no thickness/roundness/gap/position) — just typography + padding. */
+function parseAnnouncementSizing(
+  formData: FormData,
+):
+  | Pick<
+      AnnouncementBarSettings,
+      | "messageFontSize"
+      | "mobileMessageFontSize"
+      | "paddingTop"
+      | "paddingBottom"
+      | "paddingLeft"
+      | "paddingRight"
+      | "mobilePaddingTop"
+      | "mobilePaddingBottom"
+      | "mobilePaddingLeft"
+      | "mobilePaddingRight"
+    >
+  | { error: string } {
+  const values: Record<string, number> = {};
+  for (const [key, label, max] of ANNOUNCEMENT_PIXEL_FIELDS) {
+    const parsed = Number(String(formData.get(key) ?? "").trim());
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > max) {
+      return { error: `${label} must be a number between 0 and ${max}.` };
+    }
+    values[key] = parsed;
+  }
+
+  return {
+    messageFontSize: values.messageFontSize,
+    mobileMessageFontSize: values.mobileMessageFontSize,
+    paddingTop: values.paddingTop,
+    paddingBottom: values.paddingBottom,
+    paddingLeft: values.paddingLeft,
+    paddingRight: values.paddingRight,
+    mobilePaddingTop: values.mobilePaddingTop,
+    mobilePaddingBottom: values.mobilePaddingBottom,
+    mobilePaddingLeft: values.mobilePaddingLeft,
+    mobilePaddingRight: values.mobilePaddingRight,
+  };
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
   const shop = await db.shop.findUnique({ where: { domain: session.shop } });
   const settings = normalizeWidgetSettings(shop?.widgetSettingsJson);
 
-  return { freeShippingBar: settings.freeShippingBar, bogoGift: settings.bogoGift };
+  return { freeShippingBar: settings.freeShippingBar, bogoGift: settings.bogoGift, announcementBar: settings.announcementBar };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
-  const widgetKey = formData.get("widgetKey") === "bogoGift" ? "bogoGift" : "freeShippingBar";
+  const widgetKeyRaw = formData.get("widgetKey");
+  const widgetKey = widgetKeyRaw === "bogoGift" ? "bogoGift" : widgetKeyRaw === "announcementBar" ? "announcementBar" : "freeShippingBar";
 
   const shop = await db.shop.findUnique({ where: { domain: session.shop } });
   const current = normalizeWidgetSettings(shop?.widgetSettingsJson);
+
+  if (widgetKey === "announcementBar") {
+    const sizing = parseAnnouncementSizing(formData);
+    if ("error" in sizing) return { error: sizing.error } satisfies ActionData;
+
+    const message = String(formData.get("message") ?? "").trim();
+    const ctaLabel = String(formData.get("ctaLabel") ?? "").trim();
+    const ctaUrlRaw = String(formData.get("ctaUrl") ?? "").trim();
+    const backgroundColor = String(formData.get("backgroundColor") ?? "").trim();
+    const textColor = String(formData.get("textColor") ?? "").trim();
+    const enabled = formData.get("enabled") === "true";
+    const dismissible = formData.get("dismissible") === "true";
+
+    if (!message) return { error: "Enter a message." } satisfies ActionData;
+    for (const [label, value] of [
+      ["Background", backgroundColor],
+      ["Text", textColor],
+    ] as const) {
+      if (!HEX_COLOR.test(value)) return { error: `${label} color must be a valid hex color (e.g. #008060).` } satisfies ActionData;
+    }
+    if (ctaUrlRaw && !/^https?:\/\//i.test(ctaUrlRaw) && !ctaUrlRaw.startsWith("/")) {
+      return { error: "CTA link must start with http://, https://, or /." } satisfies ActionData;
+    }
+
+    const announcementBar: AnnouncementBarSettings = {
+      ...sizing,
+      enabled,
+      message,
+      ctaLabel,
+      ctaUrl: ctaUrlRaw,
+      dismissible,
+      backgroundColor,
+      textColor,
+    };
+
+    await db.shop.update({
+      where: { domain: session.shop },
+      data: { widgetSettingsJson: { ...current, announcementBar } as unknown as object },
+    });
+
+    return { notice: "Storefront widget settings saved." } satisfies ActionData;
+  }
 
   const sizing = parseBarSizing(formData);
   if ("error" in sizing) return { error: sizing.error } satisfies ActionData;
@@ -349,7 +453,7 @@ function SnippetModal({
   id: string;
   heading: string;
   loaderFile: string;
-  placements: Array<{ tag: string; title: string; description: string }>;
+  placements: Array<{ tag: string; title: string; description: string; includeCurrency?: boolean }>;
 }) {
   const copyToClipboard = useCopyToClipboard();
   const loaderSnippet = buildLoaderSnippet(loaderFile);
@@ -367,7 +471,7 @@ function SnippetModal({
         </s-stack>
 
         {placements.map((placement, index) => {
-          const placementSnippet = buildPlacementSnippet(placement.tag);
+          const placementSnippet = buildPlacementSnippet(placement.tag, placement.includeCurrency ?? true);
           return (
             <s-stack direction="block" gap="small-200" key={placement.tag}>
               <s-text type="strong">{`${index + 2}. ${placement.title}`}</s-text>
@@ -657,7 +761,174 @@ function BogoGiftSection({ initial }: { initial: BogoGiftSettings }) {
   );
 }
 
-type WidgetKey = "freeShippingBar" | "bogoGift";
+function AnnouncementBarSection({ initial }: { initial: AnnouncementBarSettings }) {
+  const actionData = useActionData() as ActionData | undefined;
+  const navigation = useNavigation();
+  const submit = useSubmit();
+  const shopify = useAppBridge();
+
+  const [draft, setDraft] = useState<AnnouncementBarSettings>(initial);
+  const update = <K extends keyof AnnouncementBarSettings>(key: K, value: AnnouncementBarSettings[K]) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const pending = navigation.state !== "idle" && navigation.formData?.get("widgetKey") === "announcementBar";
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(initial);
+
+  useEffect(() => {
+    if (!actionData || pending) return;
+    if (actionData.error) shopify.toast.show(actionData.error, { isError: true });
+    else if (actionData.notice) shopify.toast.show(actionData.notice, { duration: 2400 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionData]);
+
+  return (
+    <s-section heading="Announcement bar">
+      <s-stack direction="block" gap="base">
+        <s-paragraph>A static banner you write yourself — a promo line, a policy note, a link — shown wherever you paste it.</s-paragraph>
+
+        <AddToStoreCallout modalId="announcement-bar-snippet-modal" />
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Content</s-text>
+
+            <s-checkbox
+              label="Show the bar"
+              checked={draft.enabled}
+              onChange={(event: { target: EventTarget | null }) => {
+                const target = event.target as { checked?: boolean } | null;
+                update("enabled", Boolean(target?.checked));
+              }}
+            />
+
+            <s-text-field label="Message" value={draft.message} onInput={(event: ControlEvent) => update("message", readValue(event))} />
+
+            <s-grid gridTemplateColumns="repeat(2, minmax(160px, 1fr))" gap="base">
+              <s-text-field
+                label="CTA label"
+                details="Leave both CTA fields empty for no link."
+                value={draft.ctaLabel}
+                onInput={(event: ControlEvent) => update("ctaLabel", readValue(event))}
+              />
+              <s-text-field
+                label="CTA link"
+                details="Must start with http://, https://, or /."
+                value={draft.ctaUrl}
+                onInput={(event: ControlEvent) => update("ctaUrl", readValue(event))}
+              />
+            </s-grid>
+
+            <s-checkbox
+              label="Let shoppers dismiss it"
+              checked={draft.dismissible}
+              onChange={(event: { target: EventTarget | null }) => {
+                const target = event.target as { checked?: boolean } | null;
+                update("dismissible", Boolean(target?.checked));
+              }}
+            />
+          </s-stack>
+        </s-box>
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Style</s-text>
+
+            <s-grid gridTemplateColumns="repeat(2, minmax(160px, 1fr))" gap="base">
+              <s-color-field
+                label="Background color"
+                value={draft.backgroundColor}
+                onInput={(event: ControlEvent) => update("backgroundColor", readValue(event))}
+              />
+              <s-color-field label="Text color" value={draft.textColor} onInput={(event: ControlEvent) => update("textColor", readValue(event))} />
+            </s-grid>
+
+            <PixelPair
+              label="Message font size"
+              mobileLabel="Mobile message font size"
+              value={draft.messageFontSize}
+              mobileValue={draft.mobileMessageFontSize}
+              max={48}
+              onChange={(v) => update("messageFontSize", v)}
+              onMobileChange={(v) => update("mobileMessageFontSize", v)}
+            />
+
+            <PixelPair
+              label="Top padding"
+              mobileLabel="Mobile top padding"
+              value={draft.paddingTop}
+              mobileValue={draft.mobilePaddingTop}
+              max={200}
+              onChange={(v) => update("paddingTop", v)}
+              onMobileChange={(v) => update("mobilePaddingTop", v)}
+            />
+
+            <PixelPair
+              label="Bottom padding"
+              mobileLabel="Mobile bottom padding"
+              value={draft.paddingBottom}
+              mobileValue={draft.mobilePaddingBottom}
+              max={200}
+              onChange={(v) => update("paddingBottom", v)}
+              onMobileChange={(v) => update("mobilePaddingBottom", v)}
+            />
+
+            <PixelPair
+              label="Left padding"
+              mobileLabel="Mobile left padding"
+              value={draft.paddingLeft}
+              mobileValue={draft.mobilePaddingLeft}
+              max={200}
+              onChange={(v) => update("paddingLeft", v)}
+              onMobileChange={(v) => update("mobilePaddingLeft", v)}
+            />
+
+            <PixelPair
+              label="Right padding"
+              mobileLabel="Mobile right padding"
+              value={draft.paddingRight}
+              mobileValue={draft.mobilePaddingRight}
+              max={200}
+              onChange={(v) => update("paddingRight", v)}
+              onMobileChange={(v) => update("mobilePaddingRight", v)}
+            />
+          </s-stack>
+        </s-box>
+
+        <s-stack direction="inline" justifyContent="end">
+          <s-button
+            variant="primary"
+            loading={pending}
+            disabled={pending || !isDirty}
+            onClick={() => {
+              const data = new FormData();
+              data.set("widgetKey", "announcementBar");
+              for (const [key, value] of Object.entries(draft)) data.set(key, String(value));
+              submit(data, { method: "post" });
+            }}
+          >
+            Save
+          </s-button>
+        </s-stack>
+      </s-stack>
+
+      <SnippetModal
+        id="announcement-bar-snippet-modal"
+        heading="Announcement bar — snippet code"
+        loaderFile="announcement-bar.js"
+        placements={[
+          {
+            tag: "winslet-announcement-bar",
+            title: "Paste wherever you want it to show",
+            description: "Top of the page, above the footer, anywhere — paste it as many times as you like.",
+            includeCurrency: false,
+          },
+        ]}
+      />
+    </s-section>
+  );
+}
+
+type WidgetKey = "freeShippingBar" | "bogoGift" | "announcementBar";
 
 function WidgetCard({
   icon,
@@ -710,7 +981,7 @@ function WidgetCard({
 }
 
 export default function StorefrontWidgets() {
-  const { freeShippingBar, bogoGift } = useLoaderData<typeof loader>();
+  const { freeShippingBar, bogoGift, announcementBar } = useLoaderData<typeof loader>();
   const [selected, setSelected] = useState<WidgetKey | null>(null);
 
   if (selected === "freeShippingBar") {
@@ -731,6 +1002,17 @@ export default function StorefrontWidgets() {
           Storefront
         </s-button>
         <BogoGiftSection initial={bogoGift} />
+      </s-page>
+    );
+  }
+
+  if (selected === "announcementBar") {
+    return (
+      <s-page heading="Storefront" inlineSize="small">
+        <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
+          Storefront
+        </s-button>
+        <AnnouncementBarSection initial={announcementBar} />
       </s-page>
     );
   }
@@ -760,8 +1042,8 @@ export default function StorefrontWidgets() {
               icon="megaphone"
               iconBackground="#f1f2f3"
               title="Announcement bar"
-              description="Coming soon."
-              disabled
+              description="A static banner with your own message and link."
+              onClick={() => setSelected("announcementBar")}
             />
           </s-grid>
         </s-stack>

@@ -108,9 +108,43 @@ export interface BogoGiftSettings extends BarSizingSettings {
   addButtonLabel: string;
 }
 
+/**
+ * A static, merchant-written marketing banner — no campaign data
+ * behind it (unlike the other two widgets), just whatever text/link
+ * the merchant sets here. Deliberately its own shape rather than
+ * extending BarSizingSettings: there's no progress bar to size
+ * (barThickness/barRoundness/barMessageGap/barPosition don't apply),
+ * only a message, an optional CTA link, and basic padding/typography.
+ */
+export interface AnnouncementBarSettings {
+  // Master on/off switch — lets the merchant keep the snippet pasted
+  // in their theme permanently and toggle the bar itself from here.
+  enabled: boolean;
+  message: string;
+  // Both empty = no CTA link rendered.
+  ctaLabel: string;
+  ctaUrl: string;
+  // Shows a dismiss (x) button; the shopper's dismissal is remembered
+  // (per browser) until the merchant changes the message.
+  dismissible: boolean;
+  backgroundColor: string;
+  textColor: string;
+  messageFontSize: number;
+  mobileMessageFontSize: number;
+  paddingTop: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  paddingRight: number;
+  mobilePaddingTop: number;
+  mobilePaddingBottom: number;
+  mobilePaddingLeft: number;
+  mobilePaddingRight: number;
+}
+
 export interface WidgetSettings {
   freeShippingBar: FreeShippingBarSettings;
   bogoGift: BogoGiftSettings;
+  announcementBar: AnnouncementBarSettings;
 }
 
 const DEFAULT_BAR_SIZING: BarSizingSettings = {
@@ -156,6 +190,26 @@ const DEFAULT_BOGO_GIFT: BogoGiftSettings = {
   addButtonLabel: "Add",
 };
 
+const DEFAULT_ANNOUNCEMENT_BAR: AnnouncementBarSettings = {
+  enabled: false,
+  message: "Free shipping on all orders over $50!",
+  ctaLabel: "",
+  ctaUrl: "",
+  dismissible: true,
+  backgroundColor: "#1a1a1a",
+  textColor: "#ffffff",
+  messageFontSize: 14,
+  mobileMessageFontSize: 13,
+  paddingTop: 12,
+  paddingBottom: 12,
+  paddingLeft: 16,
+  paddingRight: 16,
+  mobilePaddingTop: 10,
+  mobilePaddingBottom: 10,
+  mobilePaddingLeft: 12,
+  mobilePaddingRight: 12,
+};
+
 const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
 
 function normalizeHexColor(raw: unknown, fallback: string): string {
@@ -164,6 +218,18 @@ function normalizeHexColor(raw: unknown, fallback: string): string {
 
 function normalizeMessage(raw: unknown, fallback: string): string {
   return typeof raw === "string" && raw.trim() ? raw.trim() : fallback;
+}
+
+function normalizeBoolean(raw: unknown, fallback: boolean): boolean {
+  return typeof raw === "boolean" ? raw : fallback;
+}
+
+/** Only http(s) or a same-site relative path — never javascript:/data: etc., since this renders as a live href on the storefront. */
+function normalizeUrl(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const value = raw.trim();
+  if (!value) return "";
+  return /^https?:\/\//i.test(value) || value.startsWith("/") ? value : "";
 }
 
 function normalizePixels(raw: unknown, fallback: number, max: number): number {
@@ -201,6 +267,7 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
   const record = recordOf(raw);
   const barRecord = recordOf(record.freeShippingBar);
   const giftRecord = recordOf(record.bogoGift);
+  const announcementRecord = recordOf(record.announcementBar);
 
   const nearThresholdPercent =
     typeof barRecord.nearThresholdPercent === "number" && Number.isFinite(barRecord.nearThresholdPercent)
@@ -228,6 +295,37 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
       addButtonColor: normalizeHexColor(giftRecord.addButtonColor, DEFAULT_BOGO_GIFT.addButtonColor),
       addButtonTextColor: normalizeHexColor(giftRecord.addButtonTextColor, DEFAULT_BOGO_GIFT.addButtonTextColor),
       addButtonLabel: normalizeMessage(giftRecord.addButtonLabel, DEFAULT_BOGO_GIFT.addButtonLabel),
+    },
+    announcementBar: {
+      enabled: normalizeBoolean(announcementRecord.enabled, DEFAULT_ANNOUNCEMENT_BAR.enabled),
+      message: normalizeMessage(announcementRecord.message, DEFAULT_ANNOUNCEMENT_BAR.message),
+      ctaLabel: typeof announcementRecord.ctaLabel === "string" ? announcementRecord.ctaLabel.trim() : DEFAULT_ANNOUNCEMENT_BAR.ctaLabel,
+      ctaUrl: normalizeUrl(announcementRecord.ctaUrl),
+      dismissible: normalizeBoolean(announcementRecord.dismissible, DEFAULT_ANNOUNCEMENT_BAR.dismissible),
+      backgroundColor: normalizeHexColor(announcementRecord.backgroundColor, DEFAULT_ANNOUNCEMENT_BAR.backgroundColor),
+      textColor: normalizeHexColor(announcementRecord.textColor, DEFAULT_ANNOUNCEMENT_BAR.textColor),
+      messageFontSize: normalizePixels(announcementRecord.messageFontSize, DEFAULT_ANNOUNCEMENT_BAR.messageFontSize, 48),
+      mobileMessageFontSize: normalizePixels(
+        announcementRecord.mobileMessageFontSize,
+        DEFAULT_ANNOUNCEMENT_BAR.mobileMessageFontSize,
+        48,
+      ),
+      paddingTop: normalizePixels(announcementRecord.paddingTop, DEFAULT_ANNOUNCEMENT_BAR.paddingTop, 200),
+      paddingBottom: normalizePixels(announcementRecord.paddingBottom, DEFAULT_ANNOUNCEMENT_BAR.paddingBottom, 200),
+      paddingLeft: normalizePixels(announcementRecord.paddingLeft, DEFAULT_ANNOUNCEMENT_BAR.paddingLeft, 200),
+      paddingRight: normalizePixels(announcementRecord.paddingRight, DEFAULT_ANNOUNCEMENT_BAR.paddingRight, 200),
+      mobilePaddingTop: normalizePixels(announcementRecord.mobilePaddingTop, DEFAULT_ANNOUNCEMENT_BAR.mobilePaddingTop, 200),
+      mobilePaddingBottom: normalizePixels(
+        announcementRecord.mobilePaddingBottom,
+        DEFAULT_ANNOUNCEMENT_BAR.mobilePaddingBottom,
+        200,
+      ),
+      mobilePaddingLeft: normalizePixels(announcementRecord.mobilePaddingLeft, DEFAULT_ANNOUNCEMENT_BAR.mobilePaddingLeft, 200),
+      mobilePaddingRight: normalizePixels(
+        announcementRecord.mobilePaddingRight,
+        DEFAULT_ANNOUNCEMENT_BAR.mobilePaddingRight,
+        200,
+      ),
     },
   };
 }
