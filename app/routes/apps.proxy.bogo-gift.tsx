@@ -59,7 +59,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         productId: node.id,
         title: node.title,
         image: node.featuredImage?.url ?? null,
-        variantId: variant.id,
+        // /cart/add.js (the storefront's own AJAX cart API) takes the
+        // plain numeric variant id, not the Storefront API's GID —
+        // sending the GID makes every add-to-cart silently no-op (the
+        // request "succeeds" with a 422 the widget wasn't checking).
+        variantId: variant.id.split("/").pop(),
         availableForSale: variant.availableForSale,
         price: variant.price.amount,
         currencyCode: variant.price.currencyCode,

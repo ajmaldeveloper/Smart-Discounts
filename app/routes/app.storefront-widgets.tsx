@@ -157,6 +157,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const addButtonTextColor = String(formData.get("addButtonTextColor") ?? "").trim();
     const lockedMessage = String(formData.get("lockedMessage") ?? "").trim();
     const unlockedMessage = String(formData.get("unlockedMessage") ?? "").trim();
+    const addButtonLabel = String(formData.get("addButtonLabel") ?? "").trim();
 
     for (const [label, value] of [
       ["Background", trackColor],
@@ -169,6 +170,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (!lockedMessage) return { error: "Enter a locked message." } satisfies ActionData;
     if (!unlockedMessage) return { error: "Enter an unlocked message." } satisfies ActionData;
+    if (!addButtonLabel) return { error: "Enter an Add button label." } satisfies ActionData;
 
     const bogoGift: BogoGiftSettings = {
       ...sizing,
@@ -179,6 +181,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       addButtonTextColor,
       lockedMessage,
       unlockedMessage,
+      addButtonLabel,
     };
 
     await db.shop.update({
@@ -569,6 +572,13 @@ function BogoGiftSection({ initial }: { initial: BogoGiftSettings }) {
               details="Shown once they qualify for at least one free unit."
               value={draft.unlockedMessage}
               onInput={(event: ControlEvent) => update("unlockedMessage", readValue(event))}
+            />
+
+            <s-text-field
+              label="Add button label"
+              details="Shown on the free-gift product card's button."
+              value={draft.addButtonLabel}
+              onInput={(event: ControlEvent) => update("addButtonLabel", readValue(event))}
             />
           </s-stack>
         </s-box>

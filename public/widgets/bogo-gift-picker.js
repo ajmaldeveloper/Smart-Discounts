@@ -180,6 +180,16 @@
     };
   }
 
+  /** True once one of the campaign's own free-gift variants is already a cart line. */
+  function giftInCart(config, cart) {
+    var variantIds = (config.products || []).map(function (product) {
+      return String(product.variantId);
+    });
+    return cart.items.some(function (line) {
+      return variantIds.indexOf(String(line.variant_id)) !== -1;
+    });
+  }
+
   // ---- shared style ----
 
   function ensureSharedStyle() {
@@ -210,9 +220,18 @@
       PRODUCTS_TAG +
       " .winslet-bgp__product-title{flex:1;font-size:var(--winslet-bgp-font-size);}" +
       PRODUCTS_TAG +
-      " .winslet-bgp__add{border:none;border-radius:6px;padding:8px 16px;font-size:var(--winslet-bgp-font-size);cursor:pointer;background:var(--winslet-bgp-add-bg);color:var(--winslet-bgp-add-fg);}" +
+      " .winslet-bgp__add{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:none;border-radius:6px;padding:8px 16px;font-size:var(--winslet-bgp-font-size);cursor:pointer;background:var(--winslet-bgp-add-bg);color:var(--winslet-bgp-add-fg);}" +
       PRODUCTS_TAG +
       " .winslet-bgp__add:disabled{opacity:0.5;cursor:not-allowed;}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__spinner{display:none;width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:currentColor;border-radius:50%;animation:winslet-bgp-spin 0.6s linear infinite;}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__add--loading{cursor:wait;}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__add--loading .winslet-bgp__spinner{display:inline-block;}" +
+      PRODUCTS_TAG +
+      " .winslet-bgp__add--loading .winslet-bgp__add-label{display:none;}" +
+      "@keyframes winslet-bgp-spin{to{transform:rotate(360deg);}}" +
       "@media (max-width:" +
       MOBILE_BREAKPOINT +
       "px){" +
@@ -392,6 +411,8 @@
         return;
       }
       this.trackEl.style.backgroundColor = config.trackColor;
+      this.trackEl.style.order = config.barPosition === "bottom" ? "2" : "1";
+      this.messageEl.style.order = config.barPosition === "bottom" ? "1" : "2";
       applySharedStyleVars(this, config);
       this.style.display = "flex";
     }
@@ -434,23 +455,37 @@
 
     addToCart(variantId, button) {
       button.disabled = true;
+      button.classList.add("winslet-bgp__add--loading");
       fetch("/cart/add.js", {
         method: "POST",
         headers: { "Content-Type": "application/json", accept: "application/json" },
         body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] }),
       })
-        .then(() => {
+        .then((response) => {
+          if (!response.ok) throw new Error("add to cart failed");
           document.dispatchEvent(new CustomEvent("cart:updated"));
-          this.refreshCart();
+          // A full reload is the one refresh mechanism guaranteed to
+          // work across every theme's cart drawer/page markup — no
+          // theme-specific AJAX re-render to rely on.
+          window.location.reload();
         })
         .catch(() => {
           button.disabled = false;
+          button.classList.remove("winslet-bgp__add--loading");
         });
     }
 
     render(cart) {
       var config = this.config;
       if (!config || !config.active) return;
+
+      // Once the free gift is already a cart line, this widget's job
+      // is done — hide it and leave just the progress bar showing.
+      if (giftInCart(config, cart)) {
+        this.style.display = "none";
+        return;
+      }
+      this.style.display = "block";
 
       var qualified = qualification(config, cart).qualified;
 
@@ -472,8 +507,17 @@
         var button = document.createElement("button");
         button.type = "button";
         button.className = "winslet-bgp__add";
-        button.textContent = "Add";
         button.disabled = !qualified || !product.availableForSale;
+
+        var spinner = document.createElement("span");
+        spinner.className = "winslet-bgp__spinner";
+        button.appendChild(spinner);
+
+        var label = document.createElement("span");
+        label.className = "winslet-bgp__add-label";
+        label.textContent = config.addButtonLabel || "Add";
+        button.appendChild(label);
+
         button.addEventListener("click", () => this.addToCart(product.variantId, button));
         row.appendChild(button);
 

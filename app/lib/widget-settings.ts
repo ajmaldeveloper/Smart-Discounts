@@ -103,6 +103,9 @@ export interface BogoGiftSettings extends BarSizingSettings {
   unlockedMessage: string;
   addButtonColor: string;
   addButtonTextColor: string;
+  // The Add-to-cart button's own label — e.g. "Add", "Claim gift",
+  // "Add to cart".
+  addButtonLabel: string;
 }
 
 export interface WidgetSettings {
@@ -150,6 +153,7 @@ const DEFAULT_BOGO_GIFT: BogoGiftSettings = {
   unlockedMessage: "Your free gift is ready — add it below!",
   addButtonColor: "#008060",
   addButtonTextColor: "#ffffff",
+  addButtonLabel: "Add",
 };
 
 const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
@@ -223,6 +227,7 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
       unlockedMessage: normalizeMessage(giftRecord.unlockedMessage, DEFAULT_BOGO_GIFT.unlockedMessage),
       addButtonColor: normalizeHexColor(giftRecord.addButtonColor, DEFAULT_BOGO_GIFT.addButtonColor),
       addButtonTextColor: normalizeHexColor(giftRecord.addButtonTextColor, DEFAULT_BOGO_GIFT.addButtonTextColor),
+      addButtonLabel: normalizeMessage(giftRecord.addButtonLabel, DEFAULT_BOGO_GIFT.addButtonLabel),
     },
   };
 }

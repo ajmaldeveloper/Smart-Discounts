@@ -129,6 +129,7 @@ describe("normalizeWidgetSettings", () => {
         unlockedMessage: "Ready!",
         addButtonColor: "#dddddd",
         addButtonTextColor: "#eeeeee",
+        addButtonLabel: "Claim gift",
         barThickness: 12,
         barPosition: "bottom",
       },
@@ -141,6 +142,7 @@ describe("normalizeWidgetSettings", () => {
     expect(settings.bogoGift.unlockedMessage).toBe("Ready!");
     expect(settings.bogoGift.addButtonColor).toBe("#dddddd");
     expect(settings.bogoGift.addButtonTextColor).toBe("#eeeeee");
+    expect(settings.bogoGift.addButtonLabel).toBe("Claim gift");
     expect(settings.bogoGift.barThickness).toBe(12);
     expect(settings.bogoGift.barPosition).toBe("bottom");
   });
@@ -158,6 +160,7 @@ describe("normalizeWidgetSettings", () => {
     expect(settings.bogoGift.lockedMessage).toBe("Add {remaining} more to unlock a free gift!");
     expect(settings.bogoGift.addButtonColor).toBe("#008060");
     expect(settings.bogoGift.addButtonTextColor).toBe("#ffffff");
+    expect(settings.bogoGift.addButtonLabel).toBe("Add");
     expect(settings.bogoGift.barThickness).toBe(8);
     expect(settings.bogoGift.barPosition).toBe("top");
   });
