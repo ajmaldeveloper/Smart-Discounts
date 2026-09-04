@@ -169,25 +169,34 @@
   function qualification(config, cart) {
     var current = matchedQuantity(config.conditions, cart);
     var threshold = config.buyQuantity;
-    // threshold+1 is the unit count that earns the first free gift
-    // (see reward-types.ts's progressive-BOGO comment) — always >= 1,
-    // so this is never a divide-by-zero even when threshold is 0
-    // ("free gift with any purchase").
+    // The real Function's own selectTier (reward-engine.ts) only
+    // grants the free unit once metricValue >= minValue-getQuantity+1
+    // = threshold+1 — but metricValue at checkout is measured AFTER
+    // the shopper's free-gift unit is added (conditions here match
+    // every line, including that one), so the pre-add count only
+    // needs to reach `threshold` for the add to actually pay off at
+    // checkout: current + 1(the unit about to be added) >= threshold+1.
+    // Also correctly handles threshold 0 ("free gift, no minimum"):
+    // current >= 0 is always true, matching the Function's own
+    // behavior (adding the sole gift unit alone already clears its
+    // qualifyingThreshold of 1).
     return {
-      percent: Math.min(100, (current / (threshold + 1)) * 100),
-      remaining: Math.max(0, threshold + 1 - current),
-      qualified: current > threshold,
+      percent: threshold > 0 ? Math.min(100, (current / threshold) * 100) : 100,
+      remaining: Math.max(0, threshold - current),
+      qualified: current >= threshold,
+      // Once current already exceeds the buy threshold, the surplus
+      // unit(s) satisfy the Function's own tier at checkout on their
+      // own (the last unit over the line is what gets marked free) —
+      // the free gift is already "built in" with nothing left for the
+      // Add button to do. Checked via quantity rather than "is the
+      // gift variant present in the cart" because the free-gift
+      // product is very often the SAME product/variant the shopper is
+      // already buying (buy 3 caps, get a 4th cap free) — presence
+      // alone can't tell a paid unit from a redeemed one when they
+      // share a line, but the quantity math above already accounts
+      // for exactly that.
+      redeemed: current > threshold,
     };
-  }
-
-  /** True once one of the campaign's own free-gift variants is already a cart line. */
-  function giftInCart(config, cart) {
-    var variantIds = (config.products || []).map(function (product) {
-      return String(product.variantId);
-    });
-    return cart.items.some(function (line) {
-      return variantIds.indexOf(String(line.variant_id)) !== -1;
-    });
   }
 
   // ---- shared style ----
@@ -479,15 +488,17 @@
       var config = this.config;
       if (!config || !config.active) return;
 
-      // Once the free gift is already a cart line, this widget's job
-      // is done — hide it and leave just the progress bar showing.
-      if (giftInCart(config, cart)) {
+      var result = qualification(config, cart);
+
+      // Once the free gift is already redeemed, this widget's job is
+      // done — hide it and leave just the progress bar showing.
+      if (result.redeemed) {
         this.style.display = "none";
         return;
       }
       this.style.display = "block";
 
-      var qualified = qualification(config, cart).qualified;
+      var qualified = result.qualified;
 
       this.productsEl.innerHTML = "";
       (config.products || []).forEach((product) => {
