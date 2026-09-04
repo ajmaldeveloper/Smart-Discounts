@@ -145,12 +145,24 @@ export default function ProductsEditor({
     onPicked(selected.map((item) => item.id));
   };
 
-  const setIncluded = (productIds: string[], collectionIds: string[]) => {
-    const next: EditableLeaf[] = [];
-    if (productIds.length) next.push(leaf("product.id", "in", productIds.join(",")));
-    if (collectionIds.length) next.push(leaf("collection.id", "in", collectionIds.join(",")));
-    onChange(next);
-  };
+  // Deliberately separate functions, one leaf each — unlike setExcluded
+  // below (where both exclusion lists coexist under the same "ALL"
+  // scope), PRODUCTS and COLLECTIONS are mutually exclusive scopes, so
+  // there's never a reason to write both leaves from one call. More
+  // importantly: each ALWAYS writes its own leaf, even down to an
+  // empty value, mirroring changeScope's own "empty marker leaf" trick
+  // above — removing the last product this way leaves
+  // `product.id in ""` (matches nothing, a safe fail-closed state,
+  // same as evaluateCondition's "in" with no options), keeping `scope`
+  // on "Specific products" so the merchant sees "None selected" and
+  // picks again. Without this, removing down to zero items left NO
+  // leaf at all, and `scope` silently re-derived back to "ALL
+  // products" (matches EVERY product in the store) with no warning —
+  // a real bug, not a hypothetical one: a merchant clearing out a
+  // stale product list this way accidentally turned a targeted
+  // mix-and-match bundle into a storewide one.
+  const setIncludedProducts = (ids: string[]) => onChange([leaf("product.id", "in", ids.join(","))]);
+  const setIncludedCollections = (ids: string[]) => onChange([leaf("collection.id", "in", ids.join(","))]);
 
   const setExcluded = (productIds: string[], collectionIds: string[]) => {
     const next: EditableLeaf[] = [];
@@ -215,13 +227,13 @@ export default function ProductsEditor({
         <s-stack direction="block" gap="small">
           <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
             <s-text type="strong">Products</s-text>
-            <s-button icon="product" onClick={() => chooseProducts(includedProductIds, (ids) => setIncluded(ids, []))}>
+            <s-button icon="product" onClick={() => chooseProducts(includedProductIds, setIncludedProducts)}>
               Choose products
             </s-button>
           </s-grid>
           <ResourceRows
             ids={includedProductIds}
-            onRemove={(id) => setIncluded(includedProductIds.filter((i) => i !== id), [])}
+            onRemove={(id) => setIncludedProducts(includedProductIds.filter((i) => i !== id))}
           />
         </s-stack>
       )}
@@ -230,13 +242,13 @@ export default function ProductsEditor({
         <s-stack direction="block" gap="small">
           <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
             <s-text type="strong">Collections</s-text>
-            <s-button icon="collection" onClick={() => chooseCollections(includedCollectionIds, (ids) => setIncluded([], ids))}>
+            <s-button icon="collection" onClick={() => chooseCollections(includedCollectionIds, setIncludedCollections)}>
               Choose collections
             </s-button>
           </s-grid>
           <ResourceRows
             ids={includedCollectionIds}
-            onRemove={(id) => setIncluded([], includedCollectionIds.filter((i) => i !== id))}
+            onRemove={(id) => setIncludedCollections(includedCollectionIds.filter((i) => i !== id))}
           />
         </s-stack>
       )}

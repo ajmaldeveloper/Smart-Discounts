@@ -350,19 +350,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     if (!updated) return { error: "Unable to save schedule — check that the end date is after the start date." } satisfies ActionData;
 
-    // If the start time the merchant just saved has already passed (they
-    // picked a past moment, or simply took a while to hit Save), don't
-    // leave it sitting inert in Draft for up to ~20s until the next
-    // scheduled-publish.server.ts tick notices — publish it right now,
-    // same as clicking Publish themselves.
-    if (updated.status === "DRAFT" && updated.scheduleStartAt && updated.scheduleStartAt.getTime() <= Date.now()) {
-      const result = await publishCampaign(admin, updated);
-      if (!result.ok) {
-        return { error: `Schedule saved, but publishing failed: ${result.message ?? "Shopify rejected this campaign."}` } satisfies ActionData;
-      }
-      return { notice: "Schedule saved — its start time already passed, so it published immediately." } satisfies ActionData;
-    }
-
+    // No auto-publish here, even if the saved start time has already
+    // passed — every tab behaves the same way: Save only ever writes
+    // to our own record, and the merchant always has to explicitly hit
+    // Publish/Republish to push anything live. See the header's own
+    // Republish button and hasUnpublishedChanges above.
     return { notice: "Schedule saved." } satisfies ActionData;
   }
 

@@ -328,16 +328,16 @@ function TieredValueEditor({
         <s-select label="Discount shape" value={shape} onChange={(event: ControlEvent) => setShape(readValue(event) as DiscountShape)}>
           <s-option value="SIMPLE">Simple</s-option>
           <s-option value="TIERS" disabled={!hasTiers}>
-            {hasTiers ? "Tiers (buy more, save more)" : "Tiers (upgrade required)"}
+            {hasTiers ? "Buy More Save More" : "Buy More Save More (upgrade required)"}
           </s-option>
           {bogo && (
             <s-option value="BOGO" disabled={!hasTiers}>
-              {hasTiers ? "Buy X, get Y free" : "Buy X, get Y free (upgrade required)"}
+              {hasTiers ? "Buy X Get Y" : "Buy X Get Y (upgrade required)"}
             </s-option>
           )}
           {mixAndMatch && (
             <s-option value="MIX_AND_MATCH" disabled={!hasTiers}>
-              {hasTiers ? "Mix and match (any N for a set price)" : "Mix and match (upgrade required)"}
+              {hasTiers ? "Mix and match" : "Mix and match (upgrade required)"}
             </s-option>
           )}
         </s-select>
