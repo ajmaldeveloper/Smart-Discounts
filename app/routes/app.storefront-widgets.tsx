@@ -6,12 +6,14 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { utcIsoToZonedParts, zonedTimeToUtcIso } from "../lib/timezone";
 import {
   normalizeWidgetSettings,
   type AnnouncementBarSettings,
   type BarSizingSettings,
   type BogoGiftSettings,
   type FreeShippingBarSettings,
+  type CountdownTimerSettings,
   type OrderDiscountBarSettings,
   type TierListSettings,
   type TierProgressBarSettings,
@@ -25,6 +27,7 @@ function readValue(event: ControlEvent): string {
 }
 
 const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
+const HH_MM_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 // Hosted from our own app (not the theme extension's asset pipeline)
 // so it can be pasted into ANY theme file — the cart drawer, above the
@@ -166,6 +169,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     orderDiscountBar: settings.orderDiscountBar,
     tierProgressBar: settings.tierProgressBar,
     tierList: settings.tierList,
+    countdownTimer: settings.countdownTimer,
+    shopTimezone: shop?.timezone ?? "UTC",
   };
 };
 
@@ -173,7 +178,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const widgetKeyRaw = formData.get("widgetKey");
-  const validWidgetKeys = ["bogoGift", "announcementBar", "orderDiscountBar", "tierProgressBar", "tierList"] as const;
+  const validWidgetKeys = ["bogoGift", "announcementBar", "orderDiscountBar", "tierProgressBar", "tierList", "countdownTimer"] as const;
   const widgetKey = (validWidgetKeys as readonly string[]).includes(String(widgetKeyRaw))
     ? (widgetKeyRaw as (typeof validWidgetKeys)[number])
     : "freeShippingBar";
@@ -289,6 +294,76 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.shop.update({
       where: { domain: session.shop },
       data: { widgetSettingsJson: { ...current, tierList } as unknown as object },
+    });
+
+    return { notice: "Storefront widget settings saved." } satisfies ActionData;
+  }
+
+  if (widgetKey === "countdownTimer") {
+    const sizing = parseAnnouncementSizing(formData);
+    if ("error" in sizing) return { error: sizing.error } satisfies ActionData;
+
+    const restartModeRaw = formData.get("restartMode");
+    const restartMode = restartModeRaw === "fixed" || restartModeRaw === "weekly" ? restartModeRaw : "daily";
+    const endAt = String(formData.get("endAt") ?? "").trim();
+    const restartAfterEnd = formData.get("restartAfterEnd") === "true";
+    const repeatHours = Number(String(formData.get("repeatHours") ?? "").trim());
+    const dailyResetTime = String(formData.get("dailyResetTime") ?? "").trim();
+    const weeklyResetDay = Number(String(formData.get("weeklyResetDay") ?? "").trim());
+    const weeklyResetTime = String(formData.get("weeklyResetTime") ?? "").trim();
+    const message = String(formData.get("message") ?? "").trim();
+    const expiredMessage = String(formData.get("expiredMessage") ?? "").trim();
+    const backgroundColor = String(formData.get("backgroundColor") ?? "").trim();
+    const textColor = String(formData.get("textColor") ?? "").trim();
+    const digitBackgroundColor = String(formData.get("digitBackgroundColor") ?? "").trim();
+    const digitTextColor = String(formData.get("digitTextColor") ?? "").trim();
+
+    if (!message) return { error: "Enter a message." } satisfies ActionData;
+    for (const [label, value] of [
+      ["Background", backgroundColor],
+      ["Text", textColor],
+      ["Digit background", digitBackgroundColor],
+      ["Digit text", digitTextColor],
+    ] as const) {
+      if (!HEX_COLOR.test(value)) return { error: `${label} color must be a valid hex color (e.g. #008060).` } satisfies ActionData;
+    }
+    if (restartMode === "fixed") {
+      if (!endAt || Number.isNaN(new Date(endAt).getTime())) return { error: "Choose a valid end date/time." } satisfies ActionData;
+      if (restartAfterEnd && (!Number.isFinite(repeatHours) || repeatHours < 1 || repeatHours > 8760)) {
+        return { error: "Repeat length must be a number between 1 and 8760 hours." } satisfies ActionData;
+      }
+    }
+    if (restartMode === "daily" && !HH_MM_PATTERN.test(dailyResetTime)) {
+      return { error: "Choose a valid daily reset time." } satisfies ActionData;
+    }
+    if (restartMode === "weekly") {
+      if (!Number.isInteger(weeklyResetDay) || weeklyResetDay < 0 || weeklyResetDay > 6) {
+        return { error: "Choose a valid weekly reset day." } satisfies ActionData;
+      }
+      if (!HH_MM_PATTERN.test(weeklyResetTime)) return { error: "Choose a valid weekly reset time." } satisfies ActionData;
+    }
+
+    const countdownTimer: CountdownTimerSettings = {
+      ...sizing,
+      enabled: formData.get("enabled") === "true",
+      restartMode,
+      endAt: endAt || new Date(Date.now() + 7 * 86400000).toISOString(),
+      restartAfterEnd,
+      repeatHours: Number.isFinite(repeatHours) ? repeatHours : 24,
+      dailyResetTime: dailyResetTime || "00:00",
+      weeklyResetDay: Number.isInteger(weeklyResetDay) ? weeklyResetDay : 0,
+      weeklyResetTime: weeklyResetTime || "00:00",
+      message,
+      expiredMessage,
+      backgroundColor,
+      textColor,
+      digitBackgroundColor,
+      digitTextColor,
+    };
+
+    await db.shop.update({
+      where: { domain: session.shop },
+      data: { widgetSettingsJson: { ...current, countdownTimer } as unknown as object },
     });
 
     return { notice: "Storefront widget settings saved." } satisfies ActionData;
@@ -1463,7 +1538,330 @@ function TierListSection({ initial }: { initial: TierListSettings }) {
   );
 }
 
-type WidgetKey = "freeShippingBar" | "bogoGift" | "announcementBar" | "orderDiscountBar" | "tierProgressBar" | "tierList";
+const HOUR12_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1));
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
+const HOUR24_OPTIONS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: "Sunday" },
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+];
+
+function splitTime24(value: string): { hour12: string; minute: string; period: "AM" | "PM" } {
+  const [hourRaw, minuteRaw] = (value || "00:00").split(":");
+  const hour24 = Number(hourRaw) || 0;
+  const period: "AM" | "PM" = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return { hour12: String(hour12), minute: (minuteRaw ?? "00").padStart(2, "0"), period };
+}
+
+function joinTime24(hour12: string, minute: string, period: "AM" | "PM"): string {
+  const hour24 = (Number(hour12) % 12) + (period === "PM" ? 12 : 0);
+  return `${String(hour24).padStart(2, "0")}:${minute}`;
+}
+
+/** A 12-hour hour/minute/AM-PM picker for the "fixed" end time — shown/stored in the shop's own timezone, matching campaign scheduling elsewhere in this app. */
+function ShopTimeFields({ label, value, onChange }: { label: string; value: string; onChange: (next: string) => void }) {
+  const { hour12, minute, period } = splitTime24(value);
+
+  return (
+    <s-stack direction="block" gap="small-200">
+      <s-text color="subdued">{label}</s-text>
+      <s-grid gridTemplateColumns="repeat(3, minmax(64px, 1fr))" gap="small-200">
+        <s-select label="Hour" value={hour12} onChange={(event: ControlEvent) => onChange(joinTime24(readValue(event) || hour12, minute, period))}>
+          {HOUR12_OPTIONS.map((hour) => (
+            <s-option key={hour} value={hour}>
+              {hour}
+            </s-option>
+          ))}
+        </s-select>
+        <s-select label="Minute" value={minute} onChange={(event: ControlEvent) => onChange(joinTime24(hour12, readValue(event) || minute, period))}>
+          {MINUTE_OPTIONS.map((min) => (
+            <s-option key={min} value={min}>
+              {min}
+            </s-option>
+          ))}
+        </s-select>
+        <s-select
+          label="AM/PM"
+          value={period}
+          onChange={(event: ControlEvent) => onChange(joinTime24(hour12, minute, (readValue(event) as "AM" | "PM") || period))}
+        >
+          <s-option value="AM">AM</s-option>
+          <s-option value="PM">PM</s-option>
+        </s-select>
+      </s-grid>
+    </s-stack>
+  );
+}
+
+/** A 24-hour hour/minute picker for the daily/weekly reset time — deliberately UTC (labeled as such) so every shopper sees the same countdown, not each visitor's own local time. */
+function UtcTimeField({ label, value, onChange }: { label: string; value: string; onChange: (next: string) => void }) {
+  const [hour, minute] = (value || "00:00").split(":");
+
+  return (
+    <s-stack direction="block" gap="small-200">
+      <s-text color="subdued">{label}</s-text>
+      <s-grid gridTemplateColumns="repeat(2, minmax(64px, 1fr))" gap="small-200">
+        <s-select label="Hour" value={hour} onChange={(event: ControlEvent) => onChange(`${readValue(event) || hour}:${minute}`)}>
+          {HOUR24_OPTIONS.map((h) => (
+            <s-option key={h} value={h}>
+              {h}
+            </s-option>
+          ))}
+        </s-select>
+        <s-select label="Minute" value={minute} onChange={(event: ControlEvent) => onChange(`${hour}:${readValue(event) || minute}`)}>
+          {MINUTE_OPTIONS.map((m) => (
+            <s-option key={m} value={m}>
+              {m}
+            </s-option>
+          ))}
+        </s-select>
+      </s-grid>
+    </s-stack>
+  );
+}
+
+function CountdownTimerSection({ initial, shopTimezone }: { initial: CountdownTimerSettings; shopTimezone: string }) {
+  const actionData = useActionData() as ActionData | undefined;
+  const navigation = useNavigation();
+  const submit = useSubmit();
+  const shopify = useAppBridge();
+
+  const [draft, setDraft] = useState<CountdownTimerSettings>(initial);
+  const update = <K extends keyof CountdownTimerSettings>(key: K, value: CountdownTimerSettings[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const pending = navigation.state !== "idle" && navigation.formData?.get("widgetKey") === "countdownTimer";
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(initial);
+
+  useEffect(() => {
+    if (!actionData || pending) return;
+    if (actionData.error) shopify.toast.show(actionData.error, { isError: true });
+    else if (actionData.notice) shopify.toast.show(actionData.notice, { duration: 2400 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionData]);
+
+  const endAtParts = utcIsoToZonedParts(draft.endAt, shopTimezone);
+  const setEndAtDate = (date: string) => update("endAt", zonedTimeToUtcIso(date, endAtParts.time || "00:00", shopTimezone));
+  const setEndAtTime = (time: string) => update("endAt", zonedTimeToUtcIso(endAtParts.date, time, shopTimezone));
+
+  return (
+    <s-section heading="Countdown timer">
+      <s-stack direction="block" gap="base">
+        <s-paragraph>
+          A live Days : Hours : Min : Sec countdown — one-time, or automatically repeating daily/weekly.
+        </s-paragraph>
+
+        <AddToStoreCallout modalId="countdown-timer-snippet-modal" />
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Content</s-text>
+
+            <s-checkbox
+              label="Show the timer"
+              checked={draft.enabled}
+              onChange={(event: { target: EventTarget | null }) => {
+                const target = event.target as { checked?: boolean } | null;
+                update("enabled", Boolean(target?.checked));
+              }}
+            />
+
+            <s-select
+              label="Restart"
+              value={draft.restartMode}
+              onChange={(event: ControlEvent) => {
+                const next = readValue(event);
+                update("restartMode", (next === "fixed" || next === "weekly" ? next : "daily") as CountdownTimerSettings["restartMode"]);
+              }}
+            >
+              <s-option value="fixed">Fixed — one end date/time</s-option>
+              <s-option value="daily">Restart daily</s-option>
+              <s-option value="weekly">Restart weekly</s-option>
+            </s-select>
+
+            {draft.restartMode === "fixed" && (
+              <>
+                <s-grid gridTemplateColumns="repeat(2, minmax(140px, 1fr))" gap="base" alignItems="end">
+                  <s-date-field label="End date" value={endAtParts.date} onInput={(event: ControlEvent) => setEndAtDate(readValue(event))} />
+                  <ShopTimeFields label="End time" value={endAtParts.time} onChange={setEndAtTime} />
+                </s-grid>
+
+                <s-checkbox
+                  label="Restart automatically after it ends"
+                  checked={draft.restartAfterEnd}
+                  onChange={(event: { target: EventTarget | null }) => {
+                    const target = event.target as { checked?: boolean } | null;
+                    update("restartAfterEnd", Boolean(target?.checked));
+                  }}
+                />
+
+                {draft.restartAfterEnd && (
+                  <s-number-field
+                    label="Repeat every (hours)"
+                    details="e.g. 24 for daily, 72 for every 3 days."
+                    min={1}
+                    max={8760}
+                    value={String(draft.repeatHours)}
+                    onInput={(event: ControlEvent) => update("repeatHours", Number(readValue(event)) || 24)}
+                  />
+                )}
+              </>
+            )}
+
+            {draft.restartMode === "daily" && (
+              <UtcTimeField label="Resets daily at (UTC)" value={draft.dailyResetTime} onChange={(v) => update("dailyResetTime", v)} />
+            )}
+
+            {draft.restartMode === "weekly" && (
+              <>
+                <s-select
+                  label="Resets on"
+                  value={String(draft.weeklyResetDay)}
+                  onChange={(event: ControlEvent) => update("weeklyResetDay", Number(readValue(event)) || 0)}
+                >
+                  {WEEKDAY_OPTIONS.map((day) => (
+                    <s-option key={day.value} value={String(day.value)}>
+                      {day.label}
+                    </s-option>
+                  ))}
+                </s-select>
+                <UtcTimeField label="Resets at (UTC)" value={draft.weeklyResetTime} onChange={(v) => update("weeklyResetTime", v)} />
+              </>
+            )}
+
+            <s-text-field label="Message" value={draft.message} onInput={(event: ControlEvent) => update("message", readValue(event))} />
+
+            <s-text-field
+              label="Expired message"
+              details="Shown once a fixed (non-restarting) countdown ends. Leave blank to hide the timer entirely instead."
+              value={draft.expiredMessage}
+              onInput={(event: ControlEvent) => update("expiredMessage", readValue(event))}
+            />
+          </s-stack>
+        </s-box>
+
+        <s-box borderWidth="base" borderColor="subdued" borderRadius="base" padding="base">
+          <s-stack direction="block" gap="base">
+            <s-text type="strong">Style</s-text>
+
+            <s-grid gridTemplateColumns="repeat(2, minmax(160px, 1fr))" gap="base">
+              <s-color-field
+                label="Background color"
+                value={draft.backgroundColor}
+                onInput={(event: ControlEvent) => update("backgroundColor", readValue(event))}
+              />
+              <s-color-field label="Text color" value={draft.textColor} onInput={(event: ControlEvent) => update("textColor", readValue(event))} />
+              <s-color-field
+                label="Digit background color"
+                value={draft.digitBackgroundColor}
+                onInput={(event: ControlEvent) => update("digitBackgroundColor", readValue(event))}
+              />
+              <s-color-field
+                label="Digit text color"
+                value={draft.digitTextColor}
+                onInput={(event: ControlEvent) => update("digitTextColor", readValue(event))}
+              />
+            </s-grid>
+
+            <PixelPair
+              label="Font size"
+              mobileLabel="Mobile font size"
+              value={draft.messageFontSize}
+              mobileValue={draft.mobileMessageFontSize}
+              max={48}
+              onChange={(v) => update("messageFontSize", v)}
+              onMobileChange={(v) => update("mobileMessageFontSize", v)}
+            />
+
+            <PixelPair
+              label="Top padding"
+              mobileLabel="Mobile top padding"
+              value={draft.paddingTop}
+              mobileValue={draft.mobilePaddingTop}
+              max={200}
+              onChange={(v) => update("paddingTop", v)}
+              onMobileChange={(v) => update("mobilePaddingTop", v)}
+            />
+
+            <PixelPair
+              label="Bottom padding"
+              mobileLabel="Mobile bottom padding"
+              value={draft.paddingBottom}
+              mobileValue={draft.mobilePaddingBottom}
+              max={200}
+              onChange={(v) => update("paddingBottom", v)}
+              onMobileChange={(v) => update("mobilePaddingBottom", v)}
+            />
+
+            <PixelPair
+              label="Left padding"
+              mobileLabel="Mobile left padding"
+              value={draft.paddingLeft}
+              mobileValue={draft.mobilePaddingLeft}
+              max={200}
+              onChange={(v) => update("paddingLeft", v)}
+              onMobileChange={(v) => update("mobilePaddingLeft", v)}
+            />
+
+            <PixelPair
+              label="Right padding"
+              mobileLabel="Mobile right padding"
+              value={draft.paddingRight}
+              mobileValue={draft.mobilePaddingRight}
+              max={200}
+              onChange={(v) => update("paddingRight", v)}
+              onMobileChange={(v) => update("mobilePaddingRight", v)}
+            />
+          </s-stack>
+        </s-box>
+
+        <s-stack direction="inline" justifyContent="end">
+          <s-button
+            variant="primary"
+            loading={pending}
+            disabled={pending || !isDirty}
+            onClick={() => {
+              const data = new FormData();
+              data.set("widgetKey", "countdownTimer");
+              for (const [key, value] of Object.entries(draft)) data.set(key, String(value));
+              submit(data, { method: "post" });
+            }}
+          >
+            Save
+          </s-button>
+        </s-stack>
+      </s-stack>
+
+      <SnippetModal
+        id="countdown-timer-snippet-modal"
+        heading="Countdown timer — snippet code"
+        loaderFile="countdown-timer.js"
+        placements={[
+          {
+            tag: "winslet-countdown-timer",
+            title: "Paste wherever you want it to show",
+            description: "Cart drawer, cart page, product page, anywhere — paste it as many times as you like.",
+            includeCurrency: false,
+          },
+        ]}
+      />
+    </s-section>
+  );
+}
+
+type WidgetKey =
+  | "freeShippingBar"
+  | "bogoGift"
+  | "announcementBar"
+  | "orderDiscountBar"
+  | "tierProgressBar"
+  | "tierList"
+  | "countdownTimer";
 
 function WidgetCard({
   icon,
@@ -1473,7 +1871,7 @@ function WidgetCard({
   onClick,
   disabled,
 }: {
-  icon: "cart-discount" | "gift-card" | "megaphone" | "discount" | "chart-stacked" | "price-list";
+  icon: "cart-discount" | "gift-card" | "megaphone" | "discount" | "chart-stacked" | "price-list" | "clock";
   iconBackground: string;
   title: string;
   description: string;
@@ -1516,7 +1914,8 @@ function WidgetCard({
 }
 
 export default function StorefrontWidgets() {
-  const { freeShippingBar, bogoGift, announcementBar, orderDiscountBar, tierProgressBar, tierList } = useLoaderData<typeof loader>();
+  const { freeShippingBar, bogoGift, announcementBar, orderDiscountBar, tierProgressBar, tierList, countdownTimer, shopTimezone } =
+    useLoaderData<typeof loader>();
   const [selected, setSelected] = useState<WidgetKey | null>(null);
 
   if (selected === "freeShippingBar") {
@@ -1585,6 +1984,17 @@ export default function StorefrontWidgets() {
     );
   }
 
+  if (selected === "countdownTimer") {
+    return (
+      <s-page heading="Storefront" inlineSize="small">
+        <s-button variant="tertiary" icon="arrow-left" onClick={() => setSelected(null)}>
+          Storefront
+        </s-button>
+        <CountdownTimerSection initial={countdownTimer} shopTimezone={shopTimezone} />
+      </s-page>
+    );
+  }
+
   return (
     <s-page heading="Storefront" inlineSize="small">
       <s-section heading="Widgets">
@@ -1633,6 +2043,13 @@ export default function StorefrontWidgets() {
               title="Tier list popup"
               description="A click-to-open list of every volume-discount tier."
               onClick={() => setSelected("tierList")}
+            />
+            <WidgetCard
+              icon="clock"
+              iconBackground="#fdf0d5"
+              title="Countdown timer"
+              description="A live Days:Hours:Min:Sec countdown — fixed, daily, or weekly."
+              onClick={() => setSelected("countdownTimer")}
             />
           </s-grid>
         </s-stack>

@@ -162,6 +162,55 @@ export interface AnnouncementBarSettings {
 }
 
 /**
+ * A merchant-configured countdown — the one widget here with no
+ * campaign/cart data behind it at all (like AnnouncementBarSettings),
+ * just a target time computed purely from these fields:
+ *   - "fixed": counts down to one absolute endAt. If restartAfterEnd
+ *     is off, it just stops (showing expiredMessage, or hiding
+ *     entirely if that's blank). If on, once endAt passes it keeps
+ *     repeating a cycle of repeatHours, forever, anchored at endAt.
+ *   - "daily"/"weekly": counts down to the next occurrence of a
+ *     fixed UTC time-of-day (dailyResetTime) or UTC weekday+time
+ *     (weeklyResetDay/weeklyResetTime) — deliberately UTC, not each
+ *     shopper's own local time, so every visitor sees the SAME
+ *     countdown at any given moment rather than their own private
+ *     timer starting from first view.
+ * All the actual "what time is it, how much is left" math happens in
+ * countdown-timer.js — this is just the merchant's configuration.
+ */
+export interface CountdownTimerSettings {
+  enabled: boolean;
+  restartMode: "fixed" | "daily" | "weekly";
+  // ISO 8601 UTC datetime.
+  endAt: string;
+  restartAfterEnd: boolean;
+  repeatHours: number;
+  // "HH:MM", UTC, 24-hour.
+  dailyResetTime: string;
+  // 0 (Sunday) – 6 (Saturday), UTC.
+  weeklyResetDay: number;
+  weeklyResetTime: string;
+  message: string;
+  // Shown once a "fixed" (non-restarting) countdown ends. Blank hides
+  // the widget entirely instead.
+  expiredMessage: string;
+  backgroundColor: string;
+  textColor: string;
+  digitBackgroundColor: string;
+  digitTextColor: string;
+  messageFontSize: number;
+  mobileMessageFontSize: number;
+  paddingTop: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  paddingRight: number;
+  mobilePaddingTop: number;
+  mobilePaddingBottom: number;
+  mobilePaddingLeft: number;
+  mobilePaddingRight: number;
+}
+
+/**
  * A single progress bar toward the shopper's NEXT unmet volume/
  * quantity tier (see storefront-widgets.server.ts's
  * getActiveTieredDiscount) — small tick marks along the track show
@@ -217,6 +266,7 @@ export interface WidgetSettings {
   orderDiscountBar: OrderDiscountBarSettings;
   tierProgressBar: TierProgressBarSettings;
   tierList: TierListSettings;
+  countdownTimer: CountdownTimerSettings;
 }
 
 const DEFAULT_BAR_SIZING: BarSizingSettings = {
@@ -271,6 +321,33 @@ const DEFAULT_BOGO_GIFT: BogoGiftSettings = {
   addButtonColor: "#008060",
   addButtonTextColor: "#ffffff",
   addButtonLabel: "Add",
+};
+
+const DEFAULT_COUNTDOWN_TIMER: CountdownTimerSettings = {
+  enabled: false,
+  restartMode: "daily",
+  endAt: "",
+  restartAfterEnd: true,
+  repeatHours: 24,
+  dailyResetTime: "00:00",
+  weeklyResetDay: 0,
+  weeklyResetTime: "00:00",
+  message: "Sale ends in:",
+  expiredMessage: "This offer has ended.",
+  backgroundColor: "#1a1a1a",
+  textColor: "#ffffff",
+  digitBackgroundColor: "#2c2c2c",
+  digitTextColor: "#ffffff",
+  messageFontSize: 14,
+  mobileMessageFontSize: 13,
+  paddingTop: 12,
+  paddingBottom: 12,
+  paddingLeft: 16,
+  paddingRight: 16,
+  mobilePaddingTop: 10,
+  mobilePaddingBottom: 10,
+  mobilePaddingLeft: 12,
+  mobilePaddingRight: 12,
 };
 
 const DEFAULT_ANNOUNCEMENT_BAR: AnnouncementBarSettings = {
@@ -343,6 +420,26 @@ function normalizeUrl(raw: unknown): string {
   return /^https?:\/\//i.test(value) || value.startsWith("/") ? value : "";
 }
 
+const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function normalizeHhMm(raw: unknown, fallback: string): string {
+  return typeof raw === "string" && HH_MM.test(raw.trim()) ? raw.trim() : fallback;
+}
+
+function normalizeIsoDateTime(raw: unknown, fallback: string): string {
+  if (typeof raw === "string" && raw.trim() && !Number.isNaN(new Date(raw).getTime())) return raw.trim();
+  return fallback;
+}
+
+function normalizeWeekday(raw: unknown, fallback: number): number {
+  return typeof raw === "number" && Number.isInteger(raw) && raw >= 0 && raw <= 6 ? raw : fallback;
+}
+
+/** Cycle length for a repeating "fixed" countdown — at least 1 hour (never a zero/negative-length loop), at most a year. */
+function normalizeRepeatHours(raw: unknown, fallback: number): number {
+  return typeof raw === "number" && Number.isFinite(raw) ? Math.min(8760, Math.max(1, raw)) : fallback;
+}
+
 function normalizePixels(raw: unknown, fallback: number, max: number): number {
   return typeof raw === "number" && Number.isFinite(raw) ? Math.min(max, Math.max(0, raw)) : fallback;
 }
@@ -382,6 +479,7 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
   const orderBarRecord = recordOf(record.orderDiscountBar);
   const tierBarRecord = recordOf(record.tierProgressBar);
   const tierListRecord = recordOf(record.tierList);
+  const countdownRecord = recordOf(record.countdownTimer);
 
   const nearThresholdPercent =
     typeof barRecord.nearThresholdPercent === "number" && Number.isFinite(barRecord.nearThresholdPercent)
@@ -481,6 +579,35 @@ export function normalizeWidgetSettings(raw: unknown): WidgetSettings {
       mobilePaddingBottom: normalizePixels(tierListRecord.mobilePaddingBottom, DEFAULT_TIER_LIST.mobilePaddingBottom, 200),
       mobilePaddingLeft: normalizePixels(tierListRecord.mobilePaddingLeft, DEFAULT_TIER_LIST.mobilePaddingLeft, 200),
       mobilePaddingRight: normalizePixels(tierListRecord.mobilePaddingRight, DEFAULT_TIER_LIST.mobilePaddingRight, 200),
+    },
+    countdownTimer: {
+      enabled: normalizeBoolean(countdownRecord.enabled, DEFAULT_COUNTDOWN_TIMER.enabled),
+      restartMode:
+        countdownRecord.restartMode === "fixed" || countdownRecord.restartMode === "daily" || countdownRecord.restartMode === "weekly"
+          ? countdownRecord.restartMode
+          : DEFAULT_COUNTDOWN_TIMER.restartMode,
+      endAt: normalizeIsoDateTime(countdownRecord.endAt, DEFAULT_COUNTDOWN_TIMER.endAt || new Date(Date.now() + 7 * 86400000).toISOString()),
+      restartAfterEnd: normalizeBoolean(countdownRecord.restartAfterEnd, DEFAULT_COUNTDOWN_TIMER.restartAfterEnd),
+      repeatHours: normalizeRepeatHours(countdownRecord.repeatHours, DEFAULT_COUNTDOWN_TIMER.repeatHours),
+      dailyResetTime: normalizeHhMm(countdownRecord.dailyResetTime, DEFAULT_COUNTDOWN_TIMER.dailyResetTime),
+      weeklyResetDay: normalizeWeekday(countdownRecord.weeklyResetDay, DEFAULT_COUNTDOWN_TIMER.weeklyResetDay),
+      weeklyResetTime: normalizeHhMm(countdownRecord.weeklyResetTime, DEFAULT_COUNTDOWN_TIMER.weeklyResetTime),
+      message: normalizeMessage(countdownRecord.message, DEFAULT_COUNTDOWN_TIMER.message),
+      expiredMessage: typeof countdownRecord.expiredMessage === "string" ? countdownRecord.expiredMessage.trim() : DEFAULT_COUNTDOWN_TIMER.expiredMessage,
+      backgroundColor: normalizeHexColor(countdownRecord.backgroundColor, DEFAULT_COUNTDOWN_TIMER.backgroundColor),
+      textColor: normalizeHexColor(countdownRecord.textColor, DEFAULT_COUNTDOWN_TIMER.textColor),
+      digitBackgroundColor: normalizeHexColor(countdownRecord.digitBackgroundColor, DEFAULT_COUNTDOWN_TIMER.digitBackgroundColor),
+      digitTextColor: normalizeHexColor(countdownRecord.digitTextColor, DEFAULT_COUNTDOWN_TIMER.digitTextColor),
+      messageFontSize: normalizePixels(countdownRecord.messageFontSize, DEFAULT_COUNTDOWN_TIMER.messageFontSize, 48),
+      mobileMessageFontSize: normalizePixels(countdownRecord.mobileMessageFontSize, DEFAULT_COUNTDOWN_TIMER.mobileMessageFontSize, 48),
+      paddingTop: normalizePixels(countdownRecord.paddingTop, DEFAULT_COUNTDOWN_TIMER.paddingTop, 200),
+      paddingBottom: normalizePixels(countdownRecord.paddingBottom, DEFAULT_COUNTDOWN_TIMER.paddingBottom, 200),
+      paddingLeft: normalizePixels(countdownRecord.paddingLeft, DEFAULT_COUNTDOWN_TIMER.paddingLeft, 200),
+      paddingRight: normalizePixels(countdownRecord.paddingRight, DEFAULT_COUNTDOWN_TIMER.paddingRight, 200),
+      mobilePaddingTop: normalizePixels(countdownRecord.mobilePaddingTop, DEFAULT_COUNTDOWN_TIMER.mobilePaddingTop, 200),
+      mobilePaddingBottom: normalizePixels(countdownRecord.mobilePaddingBottom, DEFAULT_COUNTDOWN_TIMER.mobilePaddingBottom, 200),
+      mobilePaddingLeft: normalizePixels(countdownRecord.mobilePaddingLeft, DEFAULT_COUNTDOWN_TIMER.mobilePaddingLeft, 200),
+      mobilePaddingRight: normalizePixels(countdownRecord.mobilePaddingRight, DEFAULT_COUNTDOWN_TIMER.mobilePaddingRight, 200),
     },
   };
 }

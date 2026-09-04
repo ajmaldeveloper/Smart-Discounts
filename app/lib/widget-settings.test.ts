@@ -366,3 +366,84 @@ describe("normalizeWidgetSettings — tierList", () => {
     expect(settings.tierList.backgroundColor).toBe("#ffffff");
   });
 });
+
+describe("normalizeWidgetSettings — countdownTimer", () => {
+  it("normalizes a full valid fixed-mode config", () => {
+    const settings = normalizeWidgetSettings({
+      countdownTimer: {
+        enabled: true,
+        restartMode: "fixed",
+        endAt: "2026-12-25T00:00:00.000Z",
+        restartAfterEnd: true,
+        repeatHours: 48,
+        message: "Ends in:",
+        expiredMessage: "Ended!",
+        backgroundColor: "#111111",
+        textColor: "#222222",
+        digitBackgroundColor: "#333333",
+        digitTextColor: "#444444",
+        messageFontSize: 16,
+      },
+    });
+
+    expect(settings.countdownTimer.enabled).toBe(true);
+    expect(settings.countdownTimer.restartMode).toBe("fixed");
+    expect(settings.countdownTimer.endAt).toBe("2026-12-25T00:00:00.000Z");
+    expect(settings.countdownTimer.restartAfterEnd).toBe(true);
+    expect(settings.countdownTimer.repeatHours).toBe(48);
+    expect(settings.countdownTimer.message).toBe("Ends in:");
+    expect(settings.countdownTimer.expiredMessage).toBe("Ended!");
+    expect(settings.countdownTimer.backgroundColor).toBe("#111111");
+    expect(settings.countdownTimer.digitBackgroundColor).toBe("#333333");
+    expect(settings.countdownTimer.messageFontSize).toBe(16);
+  });
+
+  it("normalizes a valid daily/weekly reset time", () => {
+    const settings = normalizeWidgetSettings({
+      countdownTimer: { restartMode: "weekly", weeklyResetDay: 3, weeklyResetTime: "14:30", dailyResetTime: "09:15" },
+    });
+
+    expect(settings.countdownTimer.restartMode).toBe("weekly");
+    expect(settings.countdownTimer.weeklyResetDay).toBe(3);
+    expect(settings.countdownTimer.weeklyResetTime).toBe("14:30");
+    expect(settings.countdownTimer.dailyResetTime).toBe("09:15");
+  });
+
+  it("rejects a malformed HH:MM and falls back to the default", () => {
+    const settings = normalizeWidgetSettings({
+      countdownTimer: { dailyResetTime: "25:99", weeklyResetTime: "not-a-time" },
+    });
+
+    expect(settings.countdownTimer.dailyResetTime).toBe("00:00");
+    expect(settings.countdownTimer.weeklyResetTime).toBe("00:00");
+  });
+
+  it("rejects an invalid weeklyResetDay and falls back to Sunday", () => {
+    const settings = normalizeWidgetSettings({ countdownTimer: { weeklyResetDay: 9 } });
+    expect(settings.countdownTimer.weeklyResetDay).toBe(0);
+  });
+
+  it("rejects an unparseable endAt and falls back to a future default", () => {
+    const settings = normalizeWidgetSettings({ countdownTimer: { endAt: "not-a-date" } });
+    expect(new Date(settings.countdownTimer.endAt).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("clamps repeatHours to at least 1 and at most 8760", () => {
+    expect(normalizeWidgetSettings({ countdownTimer: { repeatHours: 0 } }).countdownTimer.repeatHours).toBe(1);
+    expect(normalizeWidgetSettings({ countdownTimer: { repeatHours: 999999 } }).countdownTimer.repeatHours).toBe(8760);
+  });
+
+  it("returns defaults for a missing/malformed value, without disturbing other widgets", () => {
+    const settings = normalizeWidgetSettings({
+      freeShippingBar: { startColor: "#123123" },
+      countdownTimer: "garbage",
+    });
+
+    expect(settings.freeShippingBar.startColor).toBe("#123123");
+    expect(settings.countdownTimer.enabled).toBe(false);
+    expect(settings.countdownTimer.restartMode).toBe("daily");
+    expect(settings.countdownTimer.dailyResetTime).toBe("00:00");
+    expect(settings.countdownTimer.repeatHours).toBe(24);
+    expect(settings.countdownTimer.backgroundColor).toBe("#1a1a1a");
+  });
+});
