@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import db from "../db.server";
-import { getActiveFreeShippingThreshold } from "./storefront-widgets.server";
+import { getActiveBogoGiftCampaign, getActiveFreeShippingThreshold } from "./storefront-widgets.server";
 
 afterEach(async () => {
   await db.shop.deleteMany({ where: { domain: { startsWith: "storefront-widgets-test-" } } });
@@ -10,7 +10,10 @@ async function makeShop() {
   return db.shop.create({ data: { domain: `storefront-widgets-test-${Math.random().toString(36).slice(2)}.myshopify.com` } });
 }
 
-async function makeCampaign(shopId: string, overrides: Partial<{ status: string; rewardJson: object }> = {}) {
+async function makeCampaign(
+  shopId: string,
+  overrides: Partial<{ status: string; rewardJson: object; conditionsJson: object }> = {},
+) {
   return db.campaign.create({
     data: {
       shopId,
@@ -78,5 +81,87 @@ describe("getActiveFreeShippingThreshold", () => {
     });
 
     expect(await getActiveFreeShippingThreshold(shop.id)).toEqual({ active: true, minimumValue: 3, minimumMetric: "cart.quantity" });
+  });
+});
+
+describe("getActiveBogoGiftCampaign", () => {
+  const conditions = { id: "root", type: "group" as const, combinator: "ALL" as const, children: [] };
+
+  it("returns inactive when the shop has no campaigns at all", async () => {
+    const shop = await makeShop();
+    expect(await getActiveBogoGiftCampaign(shop.id)).toEqual({ active: false });
+  });
+
+  it("returns the tier's buy/get quantities and free-gift pool from an ACTIVE campaign", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      conditionsJson: conditions,
+      rewardJson: {
+        product: {
+          value: { type: "percentage", value: 0 },
+          appliesTo: "CHEAPEST_MATCHING_LINE",
+          tierMetric: "cart.quantity",
+          tiers: [
+            {
+              minValue: 4,
+              value: { type: "percentage", value: 100 },
+              getQuantity: 2,
+              freeProductIds: ["gid://shopify/Product/1", "gid://shopify/Product/2"],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(await getActiveBogoGiftCampaign(shop.id)).toEqual({
+      active: true,
+      conditions,
+      buyQuantity: 2,
+      getQuantity: 2,
+      freeProductIds: ["gid://shopify/Product/1", "gid://shopify/Product/2"],
+    });
+  });
+
+  it("ignores a PAUSED campaign even with a qualifying tier", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "PAUSED",
+      rewardJson: {
+        product: {
+          value: { type: "percentage", value: 0 },
+          appliesTo: "CHEAPEST_MATCHING_LINE",
+          tiers: [{ minValue: 3, value: { type: "percentage", value: 100 }, getQuantity: 1, freeProductIds: ["gid://shopify/Product/1"] }],
+        },
+      },
+    });
+
+    expect(await getActiveBogoGiftCampaign(shop.id)).toEqual({ active: false });
+  });
+
+  it("ignores an ACTIVE campaign whose tiers have no freeProductIds (a plain quantity discount, not a gift pool)", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: {
+        product: {
+          value: { type: "percentage", value: 0 },
+          appliesTo: "CHEAPEST_MATCHING_LINE",
+          tiers: [{ minValue: 3, value: { type: "percentage", value: 10 } }],
+        },
+      },
+    });
+
+    expect(await getActiveBogoGiftCampaign(shop.id)).toEqual({ active: false });
+  });
+
+  it("ignores an ACTIVE campaign with no product reward at all", async () => {
+    const shop = await makeShop();
+    await makeCampaign(shop.id, {
+      status: "ACTIVE",
+      rewardJson: { order: { value: { type: "percentage", value: 10 } } },
+    });
+
+    expect(await getActiveBogoGiftCampaign(shop.id)).toEqual({ active: false });
   });
 });

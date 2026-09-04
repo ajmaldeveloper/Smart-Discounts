@@ -118,4 +118,47 @@ describe("normalizeWidgetSettings", () => {
     const settings = normalizeWidgetSettings({ freeShippingBar: { startColor: "#fff" } });
     expect(settings.freeShippingBar.startColor).toBe("#fff");
   });
+
+  it("normalizes a full valid bogoGift config, independent of freeShippingBar", () => {
+    const settings = normalizeWidgetSettings({
+      bogoGift: {
+        trackColor: "#aaaaaa",
+        progressColor: "#bbbbbb",
+        unlockedColor: "#cccccc",
+        lockedMessage: "Add {remaining} more!",
+        unlockedMessage: "Ready!",
+        addButtonColor: "#dddddd",
+        addButtonTextColor: "#eeeeee",
+        barThickness: 12,
+        barPosition: "bottom",
+      },
+    });
+
+    expect(settings.bogoGift.trackColor).toBe("#aaaaaa");
+    expect(settings.bogoGift.progressColor).toBe("#bbbbbb");
+    expect(settings.bogoGift.unlockedColor).toBe("#cccccc");
+    expect(settings.bogoGift.lockedMessage).toBe("Add {remaining} more!");
+    expect(settings.bogoGift.unlockedMessage).toBe("Ready!");
+    expect(settings.bogoGift.addButtonColor).toBe("#dddddd");
+    expect(settings.bogoGift.addButtonTextColor).toBe("#eeeeee");
+    expect(settings.bogoGift.barThickness).toBe(12);
+    expect(settings.bogoGift.barPosition).toBe("bottom");
+  });
+
+  it("returns bogoGift defaults for a missing/malformed value, without disturbing freeShippingBar", () => {
+    const settings = normalizeWidgetSettings({
+      freeShippingBar: { startColor: "#123123" },
+      bogoGift: "garbage",
+    });
+
+    expect(settings.freeShippingBar.startColor).toBe("#123123");
+    expect(settings.bogoGift.trackColor).toBe("#f1f2f3");
+    expect(settings.bogoGift.progressColor).toBe("#8c9196");
+    expect(settings.bogoGift.unlockedColor).toBe("#008060");
+    expect(settings.bogoGift.lockedMessage).toBe("Add {remaining} more to unlock a free gift!");
+    expect(settings.bogoGift.addButtonColor).toBe("#008060");
+    expect(settings.bogoGift.addButtonTextColor).toBe("#ffffff");
+    expect(settings.bogoGift.barThickness).toBe(8);
+    expect(settings.bogoGift.barPosition).toBe("top");
+  });
 });
